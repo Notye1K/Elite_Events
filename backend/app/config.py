@@ -14,11 +14,11 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
-    if value.startswith("postgres://"):
-        return "postgresql+psycopg://" + value[len("postgres://"):]
-    if value.startswith("postgresql://"):
-        return "postgresql+psycopg://" + value[len("postgresql://"):]
-    return value
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value[len("postgres://"):]
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://"):]
+        return value
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
