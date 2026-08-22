@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, field_validator
 
 class Settings(BaseSettings):
     app_name: str = "Elite Dev Events API"
@@ -10,6 +10,15 @@ class Settings(BaseSettings):
     ticketmaster_api_key: str | None = None
     tmdb_api_key: str | None = None
     cors_origins: str = "http://localhost:3000"
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+    if value.startswith("postgres://"):
+        return "postgresql+psycopg://" + value[len("postgres://"):]
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value[len("postgresql://"):]
+    return value
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
