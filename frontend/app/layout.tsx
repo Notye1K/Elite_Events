@@ -1,0 +1,11 @@
+import './globals.css';
+import Link from 'next/link';
+
+export const metadata = { title: 'Elite Events', description: 'Plataforma de eventos e ingressos' };
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="pt-BR"><body>
+    <header className="topbar"><Link href="/" className="brand">ELITE<span>EVENTS</span></Link><nav><Link href="/events">Eventos</Link><Link href="/tickets">Meus ingressos</Link><Link href="/organizer">Organizador</Link><Link href="/gate">Portaria</Link><Link href="/login">Entrar</Link></nav></header>
+    <main className="shell">{children}</main>
+  </body></html>;
+}

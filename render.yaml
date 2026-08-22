@@ -1,0 +1,25 @@
+# Optional Render Blueprint for the FastAPI service.
+# PostgreSQL is intentionally external: use Supabase Free for the challenge.
+services:
+  - type: web
+    name: elite-dev-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TICKET_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: TICKETMASTER_API_KEY
+        sync: false
+      - key: TMDB_API_KEY
+        sync: false

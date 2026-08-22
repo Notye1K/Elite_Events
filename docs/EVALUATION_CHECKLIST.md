@@ -1,0 +1,31 @@
+# Checklist de cobertura do desafio
+
+- [x] React/Next.js
+- [x] Python/FastAPI
+- [x] Banco relacional + instruções de configuração
+- [x] Navegação e busca de eventos
+- [x] Criação/gestão de eventos
+- [x] Mapa de assentos
+- [x] Pagamento aprovado
+- [x] Pagamento recusado
+- [x] Meus ingressos
+- [x] QR
+- [x] Link compartilhável
+- [x] Portaria com câmera
+- [x] Digitação manual
+- [x] Válido / inválido / já utilizado / evento errado
+- [x] Ticketmaster/TMDb adapter
+- [x] RBAC com 3 papéis
+- [x] Persistência
+- [x] Proteção contra venda duplicada
+- [x] Ticket assinado / anti-forja
+- [x] Anti-replay na portaria
+- [x] Busca/filtro (opcional)
+- [x] Painel do organizador (opcional)
+- [x] Cancelamento e devolução ao estoque (opcional)
+- [x] Assentos em tempo real (opcional)
+- [x] Docker Compose (opcional)
+- [x] Testes (opcional)
+- [x] Deploy documentado (opcional; publicação real depende das credenciais do candidato)
+- [x] Seed com organizador, dois clientes, portaria e evento publicado
+- [x] Registro de uso de IA
