@@ -112,7 +112,7 @@ def update_event(event_id: int, payload: EventCreate, user: User = Depends(role_
     return event
 
 @app.get("/external/catalog")
-def external_catalog(source: str = Query(pattern="^tmdb$"), q: str = Query(min_length=1)):
+def external_catalog(source: str = Query(pattern="^tmdb$"), q: str = Query(min_length=1, max_length=200)):
     try:
         return catalog_search(source, q)
     except Exception as exc:

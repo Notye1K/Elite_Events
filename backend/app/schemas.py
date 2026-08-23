@@ -1,5 +1,11 @@
-from datetime import datetime
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Literal
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, UrlConstraints, field_validator
+
+MAX_EVENT_DESCRIPTION_LENGTH = 5_000
+MAX_EVENT_PRICE_CENTS = 10_000_000
+MAX_EVENT_ADVANCE_DAYS = 3_650
+EventImageUrl = Annotated[AnyHttpUrl, UrlConstraints(max_length=500)]
 
 class UserCreate(BaseModel):
     name: str
@@ -25,16 +31,38 @@ class TokenOut(BaseModel):
 
 class EventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
-    description: str = Field(min_length=1)
-    image_url: AnyHttpUrl | None = None
-    event_type: str = "seated"
+    description: str = Field(min_length=1, max_length=MAX_EVENT_DESCRIPTION_LENGTH)
+    image_url: EventImageUrl | None = None
+    event_type: Literal["seated"] = "seated"
     starts_at: datetime
     location: str = Field(min_length=1, max_length=255)
     capacity: int = Field(gt=0, le=1000)
-    price_cents: int = Field(ge=0)
+    price_cents: int = Field(ge=0, le=MAX_EVENT_PRICE_CENTS)
     published: bool = False
-    external_source: str | None = None
-    external_id: str | None = None
+    external_source: Literal["tmdb"] | None = None
+    external_id: str | None = Field(default=None, max_length=120)
+
+    @field_validator("title", "description", "location")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("não pode ficar em branco")
+        return value
+
+    @field_validator("starts_at")
+    @classmethod
+    def validate_event_date(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("deve incluir o fuso horário")
+
+        now = datetime.now(timezone.utc)
+        starts_at = value.astimezone(timezone.utc)
+        if starts_at < now + timedelta(hours=24):
+            raise ValueError("deve ter pelo menos 24 horas de antecedência")
+        if starts_at > now + timedelta(days=MAX_EVENT_ADVANCE_DAYS):
+            raise ValueError("não pode estar a mais de 10 anos no futuro")
+        return value
 
 class EventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

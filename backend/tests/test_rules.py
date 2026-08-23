@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import pytest
 from app.schemas import EventCreate
 from app.security import create_ticket_token, decode_ticket_token, token_hash
@@ -19,7 +19,7 @@ def event_payload(image_url=None):
     return {
         "title": "Evento",
         "description": "Descrição",
-        "starts_at": datetime.now(timezone.utc),
+        "starts_at": datetime.now(timezone.utc) + timedelta(hours=25),
         "location": "Local",
         "capacity": 10,
         "price_cents": 1000,
@@ -33,3 +33,33 @@ def test_event_image_url_is_optional():
 def test_event_image_url_must_be_http_url():
     with pytest.raises(ValueError):
         EventCreate(**event_payload("imagem-invalida"))
+
+def test_event_requires_at_least_24_hours_notice():
+    payload = event_payload()
+    payload["starts_at"] = datetime.now(timezone.utc) + timedelta(hours=23)
+    with pytest.raises(ValueError):
+        EventCreate(**payload)
+
+def test_event_cannot_be_more_than_ten_years_away():
+    payload = event_payload()
+    payload["starts_at"] = datetime.now(timezone.utc) + timedelta(days=3651)
+    with pytest.raises(ValueError):
+        EventCreate(**payload)
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("title", "x" * 256),
+        ("description", "x" * 5001),
+        ("image_url", "https://example.com/" + "x" * 500),
+        ("location", "x" * 256),
+        ("capacity", 1001),
+        ("price_cents", 10_000_001),
+        ("external_id", "x" * 121),
+    ],
+)
+def test_event_fields_reject_values_above_their_limits(field, value):
+    payload = event_payload()
+    payload[field] = value
+    with pytest.raises(ValueError):
+        EventCreate(**payload)

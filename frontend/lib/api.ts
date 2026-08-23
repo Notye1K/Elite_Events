@@ -17,7 +17,7 @@ type ValidationErrorDetail = {
   loc?: Array<string | number>;
   msg?: string;
   type?: string;
-  ctx?: Record<string, number>;
+  ctx?: Record<string, unknown>;
 };
 
 export class ApiError extends Error {
@@ -35,6 +35,9 @@ function validationMessage(detail: ValidationErrorDetail) {
     case "url_parsing":
     case "url_type":
       return "deve ser uma URL HTTP ou HTTPS válida";
+    case "url_too_long":
+    case "string_too_long":
+      return `deve ter no máximo ${detail.ctx?.max_length ?? "o limite permitido de"} caracteres`;
     case "datetime_from_date_parsing":
     case "datetime_parsing":
       return "contém uma data ou hora inválida";
@@ -44,6 +47,11 @@ function validationMessage(detail: ValidationErrorDetail) {
       return `deve ser maior ou igual a ${detail.ctx?.ge ?? 0}`;
     case "less_than_equal":
       return `deve ser menor ou igual a ${detail.ctx?.le ?? 0}`;
+    case "value_error":
+      return (detail.msg || "contém um valor inválido").replace(
+        /^Value error,\s*/,
+        "",
+      );
     default:
       return "contém um valor inválido";
   }

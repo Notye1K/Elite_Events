@@ -87,6 +87,23 @@ curl 'http://localhost:8000/external/catalog?source=tmdb&q=batman'
 
 Sem chave configurada, o endpoint retorna `configured=false`; o restante do sistema continua funcionando com o catálogo local/seed.
 
+## Limites para criação de eventos
+
+Os limites são validados no formulário e novamente pela API. Título, descrição, data/hora, local, capacidade e preço são obrigatórios; imagem e ID externo são opcionais.
+
+| Campo | Limite |
+|---|---|
+| Título | 1 a 255 caracteres; não aceita somente espaços |
+| Descrição | 1 a 5.000 caracteres; não aceita somente espaços |
+| Imagem (URL) | Opcional; URL HTTP/HTTPS com até 500 caracteres |
+| Data/hora | No mínimo 24 horas de antecedência e no máximo 10 anos no futuro |
+| Local | 1 a 255 caracteres; não aceita somente espaços |
+| Capacidade | 1 a 1.000 lugares |
+| Preço | 0 a 10.000.000 de centavos (até R$ 100.000,00) |
+| ID externo | Opcional; até 120 caracteres |
+
+A busca no catálogo do TMDb aceita consultas de até 200 caracteres.
+
 ## Decisões técnicas importantes
 
 ### 1. Mapa de assentos em vez de pista por quantidade

@@ -3,6 +3,16 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { api, ApiError, getErrorMessage } from "../../lib/api";
 
+const HOUR_IN_MS = 60 * 60 * 1000;
+const DAY_IN_MS = 24 * HOUR_IN_MS;
+const MAX_EVENT_ADVANCE_DAYS = 3650;
+const MAX_EVENT_PRICE_CENTS = 10_000_000;
+
+function toDateTimeLocal(date: Date) {
+  const localTime = date.getTime() - date.getTimezoneOffset() * 60_000;
+  return new Date(localTime).toISOString().slice(0, 16);
+}
+
 function isValidImageUrl(value: string) {
   try {
     const url = new URL(value);
@@ -34,6 +44,13 @@ export default function Organizer() {
   >("idle");
   const [lastCatalogQuery, setLastCatalogQuery] = useState("");
   const [error, setError] = useState("");
+  const minimumEventDate = new Date(Date.now() + 24 * HOUR_IN_MS);
+  minimumEventDate.setSeconds(0, 0);
+  minimumEventDate.setMinutes(minimumEventDate.getMinutes() + 1);
+  const minimumStartsAt = toDateTimeLocal(minimumEventDate);
+  const maximumStartsAt = toDateTimeLocal(
+    new Date(Date.now() + MAX_EVENT_ADVANCE_DAYS * DAY_IN_MS),
+  );
   async function load() {
     try {
       setEvents(await api("/organizer/events"));
@@ -172,6 +189,7 @@ export default function Organizer() {
               placeholder="Digite o nome do filme"
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
+              maxLength={200}
             />
             <button
               className="btn ghost"
@@ -248,6 +266,7 @@ export default function Organizer() {
               <input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
+                maxLength={255}
                 required
               />
             </label>
@@ -258,6 +277,7 @@ export default function Organizer() {
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
+                maxLength={5000}
                 required
               />
             </label>
@@ -270,6 +290,7 @@ export default function Organizer() {
                 onChange={(e) =>
                   setForm({ ...form, image_url: e.target.value })
                 }
+                maxLength={500}
               />
               <span className="muted">Opcional. Use uma URL HTTP ou HTTPS.</span>
             </label>
@@ -284,6 +305,8 @@ export default function Organizer() {
                     starts_at: e.target.value,
                   })
                 }
+                min={minimumStartsAt}
+                max={maximumStartsAt}
                 required
               />
             </label>
@@ -292,6 +315,7 @@ export default function Organizer() {
               <input
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
+                maxLength={255}
                 required
               />
             </label>
@@ -305,6 +329,8 @@ export default function Organizer() {
                     setForm({ ...form, capacity: e.target.value })
                   }
                   min="1"
+                  max="1000"
+                  step="1"
                   required
                 />
               </label>
@@ -317,6 +343,8 @@ export default function Organizer() {
                     setForm({ ...form, price_cents: e.target.value })
                   }
                   min="0"
+                  max={MAX_EVENT_PRICE_CENTS}
+                  step="1"
                   required
                 />
               </label>
@@ -328,6 +356,7 @@ export default function Organizer() {
                 onChange={(e) =>
                   setForm({ ...form, external_id: e.target.value })
                 }
+                maxLength={120}
               />
             </label>
             <button className="btn accent">Publicar evento</button>
