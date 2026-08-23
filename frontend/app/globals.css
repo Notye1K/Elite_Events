@@ -272,7 +272,7 @@ label {
 }
 .catalog-movie-info {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 .catalog-movie-info small {
   color: var(--muted);
@@ -332,12 +332,27 @@ label {
 }
 .seatmap {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 7px;
-  max-width: 720px;
+  gap: 4px;
+  width: 100%;
   margin-top: 18px;
 }
+.seat-map-card {
+  width: min(1320px, calc(100vw - 48px));
+  margin-left: 50%;
+  transform: translateX(-50%);
+}
+.seat-map-viewport {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+.seat-map-stage {
+  margin: 0 auto;
+}
 .seat {
+  width: 100%;
+  min-width: 22px;
+  padding: 0;
   aspect-ratio: 1;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -389,6 +404,7 @@ label {
   border-radius: 50% 50% 0 0;
   background: #e7e2da;
   margin: 16px auto 20px;
+  width: min(70%, 600px);
   max-width: 600px;
   text-align: center;
   font-size: 10px;
@@ -580,9 +596,6 @@ label {
   .topbar nav {
     gap: 12px;
     flex-wrap: wrap;
-  }
-  .seatmap {
-    grid-template-columns: repeat(5, 1fr);
   }
   .ticket {
     grid-template-columns: 1fr;

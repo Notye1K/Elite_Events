@@ -122,6 +122,8 @@ O endpoint protegido é `DELETE /organizer/events/{event_id}`. Tentativas de exc
 
 Escolhi o mapa porque ele torna a regra de não vender o mesmo lugar duas vezes observável durante a avaliação. Também permite demonstrar o opcional de atualização em tempo real.
 
+Na tela de compra, os lugares usam numeração visual contínua e são distribuídos em até 40 colunas, centralizadas em relação à tela/palco. Em dispositivos menores, o mapa permite rolagem horizontal para preservar a legibilidade e a área de toque de cada assento.
+
 ### 2. Concorrência no estoque
 
 Cada lugar é uma linha `Seat`. Na reserva, o backend executa `SELECT ... FOR UPDATE` no assento e só muda `available → reserved` dentro da mesma transação. O estado físico do lugar fica centralizado no banco, evitando que duas requisições confirmem o mesmo assento.
