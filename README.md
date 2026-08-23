@@ -60,9 +60,9 @@ O seed cria o evento publicado **Noite de Cinema Elite** com 40 lugares.
 2. Acesse **Eventos**.
 3. Abra o evento semeado e escolha um ou mais assentos. Cada clique alterna o lugar entre selecionado e desmarcado.
 4. Clique em **Pagar simulado** para aprovar o grupo ou **Simular recusa** para testar a devolução imediata de todos os lugares ao estoque.
-5. Abra **Meus ingressos** para ver o QR e o link compartilhável.
+5. Abra **Meus ingressos** para ver o QR, copiar o código usado na portaria ou abrir o link compartilhável.
 6. Abra o link em outra aba ou dispositivo para testar a visualização pública do ingresso.
-7. Cancele uma compra por API se quiser demonstrar devolução ao estoque: `POST /reservations/{id}/cancel`.
+7. Em **Meus ingressos**, cancele um ingresso válido para demonstrar a devolução do assento ao estoque.
 
 ### Portaria
 
@@ -118,6 +118,17 @@ A API é a autoridade de segurança e valida o token e a role em todos os endpoi
 | Link de ingresso compartilhado | Público, mediante token assinado válido |
 
 Visitantes que tentarem abrir uma página privada são enviados ao login. Usuários autenticados com uma role diferente são enviados à página pública de eventos.
+
+## Cancelamento de ingressos
+
+Na página **Meus ingressos**, o cliente pode cancelar um ingresso próprio enquanto ele estiver com status `valid`. O cancelamento usa `POST /tickets/{ticket_id}/cancel` e executa na mesma transação:
+
+- ingresso `valid → cancelled`;
+- reserva `confirmed → cancelled`;
+- pagamento `paid → refunded`;
+- assento `reserved → available`.
+
+Ingressos de outro cliente, já utilizados ou já cancelados não podem ser cancelados. O backend valida a propriedade e o estado do ingresso mesmo que o endpoint seja chamado diretamente.
 
 ## Exclusão de eventos
 
@@ -186,7 +197,7 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, matriz de acesso por role e regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
+Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, cancelamento de ingressos, matriz de acesso por role e regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
 
 ## Deploy
 

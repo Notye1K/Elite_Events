@@ -239,17 +239,23 @@ async def reserve_batch(payload: ReservationBatchCreate, user: User = Depends(ro
 async def cancel_reservation(reservation_id: int, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
     reservation = db.get(Reservation, reservation_id)
     if not reservation or reservation.user_id != user.id:
-        raise HTTPException(404, "Reservation not found")
-    if reservation.status != "confirmed":
-        raise HTTPException(409, "Only confirmed reservations can be cancelled")
+        raise HTTPException(404, "Reserva não encontrada.")
+    ticket = db.scalar(select(Ticket).where(Ticket.reservation_id == reservation.id))
+    if reservation.status != "confirmed" or not ticket or ticket.status != "valid":
+        raise HTTPException(409, "Somente ingressos válidos podem ser cancelados.")
     reservation.status = "cancelled"; reservation.payment_status = "refunded"
     seat = db.get(Seat, reservation.seat_id); seat.status = "available"
-    ticket = db.scalar(select(Ticket).where(Ticket.reservation_id == reservation.id))
-    if ticket:
-        ticket.status = "cancelled"
+    ticket.status = "cancelled"
     db.commit()
     await manager.broadcast(reservation.event_id, {"type": "seat_updated", "seat_id": seat.id, "status": seat.status})
-    return reservation_to_out(reservation, ticket.id if ticket else None)
+    return reservation_to_out(reservation, ticket.id)
+
+@app.post("/tickets/{ticket_id}/cancel", response_model=ReservationOut)
+async def cancel_ticket(ticket_id: int, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+    ticket = db.get(Ticket, ticket_id)
+    if not ticket or ticket.user_id != user.id:
+        raise HTTPException(404, "Ingresso não encontrado.")
+    return await cancel_reservation(ticket.reservation_id, user, db)
 
 @app.get("/tickets", response_model=list[TicketOut])
 def my_tickets(user: User = Depends(role_required("client")), db: Session = Depends(get_db)):

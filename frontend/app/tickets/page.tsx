@@ -1,12 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import CopyTicketCodeButton from "../../components/CopyTicketCodeButton";
 import { api } from "../../lib/api";
 import { ticketStatusLabel } from "../../lib/ticket";
 
 export default function Tickets() {
   const [tickets, setTickets] = useState<any[]>([]);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [cancellingTicketId, setCancellingTicketId] = useState<number | null>(null);
   async function load() {
     try {
       setTickets(await api("/tickets"));
@@ -17,6 +20,29 @@ export default function Tickets() {
   useEffect(() => {
     load();
   }, []);
+  async function cancelTicket(ticket: any) {
+    const confirmed = window.confirm(
+      `Deseja cancelar o ingresso para “${ticket.event_title}”, assento ${ticket.seat_label}?`,
+    );
+    if (!confirmed) return;
+
+    setError("");
+    setMessage("");
+    setCancellingTicketId(ticket.id);
+    try {
+      await api(`/tickets/${ticket.id}/cancel`, { method: "POST" });
+      setTickets((current) =>
+        current.map((item) =>
+          item.id === ticket.id ? { ...item, status: "cancelled" } : item,
+        ),
+      );
+      setMessage("Ingresso cancelado. O assento voltou a ficar disponível.");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setCancellingTicketId(null);
+    }
+  }
   return (
     <>
       <div className="hero">
@@ -28,10 +54,9 @@ export default function Tickets() {
           </p>
         </div>
       </div>
-      {error ? (
-        <div className="status bad">{error}</div>
-      ) : (
-        <div className="grid ticket-grid">
+      {error && <div className="status bad ticket-feedback">{error}</div>}
+      {message && <div className="status ok ticket-feedback">{message}</div>}
+      <div className="grid ticket-grid">
           {tickets.map((t) => (
             <div className="card ticket" key={t.id}>
               <div>
@@ -40,16 +65,35 @@ export default function Tickets() {
                 <p>
                   Assento <b>{t.seat_label}</b>
                 </p>
-                <a href={t.share_url} target="_blank" className="btn ghost">
-                  Abrir link compartilhável
-                </a>
+                <div className="ticket-actions">
+                  <a
+                    href={t.share_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn ghost"
+                  >
+                    Abrir link compartilhável
+                  </a>
+                  <CopyTicketCodeButton code={t.token} />
+                  {t.status === "valid" && (
+                    <button
+                      type="button"
+                      className="btn danger"
+                      disabled={cancellingTicketId === t.id}
+                      onClick={() => cancelTicket(t)}
+                    >
+                      {cancellingTicketId === t.id
+                        ? "Cancelando…"
+                        : "Cancelar ingresso"}
+                    </button>
+                  )}
+                </div>
                 <p className="mono">{t.token.slice(0, 36)}…</p>
               </div>
               <QRCodeSVG value={t.token} size={150} />
             </div>
           ))}
-        </div>
-      )}
+      </div>
     </>
   );
 }

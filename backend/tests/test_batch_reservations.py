@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.main import my_tickets, reserve_batch, share_ticket
+from app.main import cancel_ticket, my_tickets, reserve_batch, share_ticket
 from app.models import Event, Reservation, Seat, Ticket, User
 from app.schemas import ReservationBatchCreate
 from app.security import token_hash
@@ -140,3 +140,54 @@ def test_listed_ticket_has_stable_token_and_valid_shared_link(db: Session):
     assert ticket.token_hash == token_hash(first_listing[0].token)
     assert shared_ticket.id == ticket.id
     assert shared_ticket.token == first_listing[0].token
+
+
+def test_client_can_cancel_own_valid_ticket(db: Session):
+    client, seats = create_event_with_seats(db)
+    run_batch(db, client, seats[:1], "approve")
+    ticket = db.scalar(select(Ticket))
+    reservation = db.get(Reservation, ticket.reservation_id)
+
+    result = asyncio.run(cancel_ticket(ticket.id, client, db))
+
+    assert result.status == "cancelled"
+    assert result.payment_status == "refunded"
+    assert ticket.status == "cancelled"
+    assert reservation.status == "cancelled"
+    assert db.get(Seat, seats[0].id).status == "available"
+
+
+def test_client_cannot_cancel_another_clients_ticket(db: Session):
+    owner, seats = create_event_with_seats(db)
+    run_batch(db, owner, seats[:1], "approve")
+    ticket = db.scalar(select(Ticket))
+    another_client = User(
+        name="Outro cliente",
+        email="another-client@teste.dev",
+        password_hash="test",
+        role="client",
+    )
+    db.add(another_client)
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(cancel_ticket(ticket.id, another_client, db))
+
+    assert exc_info.value.status_code == 404
+    assert ticket.status == "valid"
+    assert db.get(Seat, seats[0].id).status == "reserved"
+
+
+def test_client_cannot_cancel_used_ticket(db: Session):
+    client, seats = create_event_with_seats(db)
+    run_batch(db, client, seats[:1], "approve")
+    ticket = db.scalar(select(Ticket))
+    ticket.status = "used"
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(cancel_ticket(ticket.id, client, db))
+
+    assert exc_info.value.status_code == 409
+    assert ticket.status == "used"
+    assert db.get(Seat, seats[0].id).status == "reserved"

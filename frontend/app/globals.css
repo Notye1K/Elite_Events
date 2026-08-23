@@ -481,6 +481,26 @@ label {
 .ticket > div {
   min-width: 0;
 }
+.ticket-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.ticket-feedback {
+  margin-bottom: 18px;
+}
+.copy-ticket-control {
+  display: grid;
+  gap: 5px;
+}
+.copy-ticket-feedback {
+  max-width: 220px;
+  min-height: 1em;
+  color: var(--bad);
+  font-size: 12px;
+}
 .ticket img,
 .ticket svg {
   max-width: 100%;

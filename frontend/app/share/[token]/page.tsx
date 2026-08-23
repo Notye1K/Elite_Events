@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import CopyTicketCodeButton from "../../../components/CopyTicketCodeButton";
 import { api } from "../../../lib/api";
 import { ticketStatusLabel } from "../../../lib/ticket";
 
@@ -26,6 +27,9 @@ export default function Share() {
             Assento <b>{ticket.seat_label}</b>
           </p>
           <span className="pill">{ticketStatusLabel(ticket.status)}</span>
+          <div className="ticket-actions">
+            <CopyTicketCodeButton code={ticket.token} />
+          </div>
         </div>
         <QRCodeSVG value={ticket.token} size={180} />
       </div>
