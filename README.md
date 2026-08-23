@@ -25,6 +25,12 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 docker compose up --build
 ```
 
+ou para o modo dev
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
 Acesse:
 
 - Frontend: http://localhost:3000
