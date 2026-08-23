@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../../lib/api";
+import { ticketStatusLabel } from "../../lib/ticket";
 
 export default function Tickets() {
   const [tickets, setTickets] = useState<any[]>([]);
@@ -34,7 +35,7 @@ export default function Tickets() {
           {tickets.map((t) => (
             <div className="card ticket" key={t.id}>
               <div>
-                <span className="pill">{t.status}</span>
+                <span className="pill">{ticketStatusLabel(t.status)}</span>
                 <h2>{t.event_title}</h2>
                 <p>
                   Assento <b>{t.seat_label}</b>
