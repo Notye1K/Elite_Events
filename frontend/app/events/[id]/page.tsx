@@ -65,7 +65,19 @@ export default function EventDetail() {
     }
   }
   return (
-    <>
+    <div className="event-detail-page">
+      {event.image_url && (
+        <div className="event-detail-background" aria-hidden="true">
+          <Image
+            src={event.image_url}
+            alt=""
+            fill
+            sizes="100vw"
+            className="event-detail-background-image"
+          />
+        </div>
+      )}
+      <div className="event-detail-content">
       <div className="hero">
         <div>
           <div className="eyebrow">Evento</div>
@@ -150,6 +162,7 @@ export default function EventDetail() {
           </div>
         )}
       </div>
-    </>
+      </div>
+    </div>
   );
 }

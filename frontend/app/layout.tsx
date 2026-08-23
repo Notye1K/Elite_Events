@@ -7,6 +7,11 @@ export const metadata = {
   description: "Plataforma de eventos e ingressos",
 };
 
+export const viewport = {
+  colorScheme: "dark",
+  themeColor: "#0d0f12",
+};
+
 export default function RootLayout({
   children,
 }: {
