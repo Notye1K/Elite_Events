@@ -1,5 +1,12 @@
 export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export type SessionUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: "client" | "organizer" | "gate";
+};
+
 const GENERIC_ERROR = "Ocorreu um erro inesperado. Tente novamente.";
 
 const fieldLabels: Record<string, string> = {
@@ -108,9 +115,10 @@ export function getErrorMessage(error: unknown) {
 export function getToken() {
   return typeof window === "undefined" ? null : localStorage.getItem("token");
 }
-export function getUser() {
+export function getUser(): SessionUser | null {
+  if (typeof window === "undefined") return null;
   try {
-    return JSON.parse(localStorage.getItem("user") || "null");
+    return JSON.parse(localStorage.getItem("user") || "null") as SessionUser | null;
   } catch {
     return null;
   }

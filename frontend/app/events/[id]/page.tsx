@@ -1,14 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, getUser } from "../../../lib/api";
+import { api, getUser, type SessionUser } from "../../../lib/api";
 
 export default function EventDetail() {
   const { id } = useParams();
   const router = useRouter();
   const [event, setEvent] = useState<any>();
   const [seats, setSeats] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -24,6 +27,23 @@ export default function EventDetail() {
       ),
     );
   }
+  useEffect(() => {
+    function updateSession() {
+      const user = getUser();
+      setCurrentUser(user);
+      setSessionChecked(true);
+      if (user?.role !== "client") setSelected([]);
+    }
+
+    updateSession();
+    window.addEventListener("auth-changed", updateSession);
+    window.addEventListener("storage", updateSession);
+
+    return () => {
+      window.removeEventListener("auth-changed", updateSession);
+      window.removeEventListener("storage", updateSession);
+    };
+  }, []);
   useEffect(() => {
     load();
     const ws = new WebSocket(
@@ -60,6 +80,7 @@ export default function EventDetail() {
     .join(", ");
   if (!event) return <div className="card">Carregando…</div>;
   function toggleSeat(seatId: number) {
+    if (currentUser?.role !== "client") return;
     setSelected((current) =>
       current.includes(seatId)
         ? current.filter((selectedId) => selectedId !== seatId)
@@ -69,8 +90,13 @@ export default function EventDetail() {
     setMessage("");
   }
   async function reserve(payment: string) {
-    if (!getUser()) {
+    const user = getUser();
+    if (!user) {
       router.push("/login");
+      return;
+    }
+    if (user.role !== "client") {
+      setError("Somente clientes podem comprar ingressos.");
       return;
     }
     if (selected.length === 0) {
@@ -154,10 +180,16 @@ export default function EventDetail() {
               {seats.map((s: any, index) => (
                 <button
                   key={s.id}
-                  disabled={s.status !== "available"}
+                  disabled={
+                    s.status !== "available" || currentUser?.role !== "client"
+                  }
                   onClick={() => toggleSeat(s.id)}
-                  className={`seat ${s.status !== "available" ? "taken" : ""} ${selected.includes(s.id) ? "selected" : ""}`}
-                  title={`Lugar ${index + 1} (${s.label})`}
+                  className={`seat ${s.status !== "available" ? "taken" : ""} ${currentUser?.role !== "client" ? "view-only" : ""} ${selected.includes(s.id) ? "selected" : ""}`}
+                  title={
+                    currentUser?.role === "client"
+                      ? `Lugar ${index + 1} (${s.label})`
+                      : `Lugar ${index + 1} (${s.label}) — compra exclusiva para clientes`
+                  }
                   aria-label={`Lugar ${index + 1}, assento ${s.label}`}
                   aria-pressed={selected.includes(s.id)}
                 >
@@ -167,30 +199,47 @@ export default function EventDetail() {
             </div>
           </div>
         </div>
-        <div className="row" style={{ marginTop: 20 }}>
-          <div>
-            {selected.length > 0 ? (
-              <div className="seat-selection-summary">
-                <b>
-                  {selected.length} {selected.length === 1 ? "assento selecionado" : "assentos selecionados"}
-                </b>
-                <span className="muted" title={selectedSeatLabels}>
-                  Lugares: {selectedSeatLabels}
-                </span>
-              </div>
-            ) : (
-              <span className="muted">Selecione um ou mais lugares</span>
+        {!sessionChecked ? (
+          <p className="muted purchase-restriction">Verificando sessão…</p>
+        ) : currentUser?.role === "client" ? (
+          <div className="row" style={{ marginTop: 20 }}>
+            <div>
+              {selected.length > 0 ? (
+                <div className="seat-selection-summary">
+                  <b>
+                    {selected.length} {selected.length === 1 ? "assento selecionado" : "assentos selecionados"}
+                  </b>
+                  <span className="muted" title={selectedSeatLabels}>
+                    Lugares: {selectedSeatLabels}
+                  </span>
+                </div>
+              ) : (
+                <span className="muted">Selecione um ou mais lugares</span>
+              )}
+            </div>
+            <div className="row">
+              <button className="btn primary" onClick={() => reserve("approve")}>
+                Pagar simulado
+              </button>
+              <button className="btn ghost" onClick={() => reserve("decline")}>
+                Simular recusa
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="purchase-restriction">
+            <p className="muted">
+              {currentUser
+                ? "A compra de ingressos é exclusiva para usuários com perfil de cliente."
+                : "Entre com um perfil de cliente para selecionar e comprar ingressos."}
+            </p>
+            {!currentUser && (
+              <Link className="btn primary" href="/login">
+                Entrar como cliente
+              </Link>
             )}
           </div>
-          <div className="row">
-            <button className="btn primary" onClick={() => reserve("approve")}>
-              Pagar simulado
-            </button>
-            <button className="btn ghost" onClick={() => reserve("decline")}>
-              Simular recusa
-            </button>
-          </div>
-        </div>
+        )}
         {error && (
           <div className="status bad" style={{ marginTop: 16 }}>
             {error}

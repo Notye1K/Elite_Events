@@ -104,6 +104,21 @@ Os limites são validados no formulário e novamente pela API. Título, descriç
 
 A busca no catálogo do TMDb aceita consultas de até 200 caracteres.
 
+## Autorização por role
+
+A API é a autoridade de segurança e valida o token e a role em todos os endpoints protegidos. O frontend também aplica guards nas páginas privadas e mostra no header apenas a opção pertinente ao usuário autenticado.
+
+| Área ou ação | Acesso |
+|---|---|
+| Lista, detalhes e assentos dos eventos | Público, inclusive sem login |
+| Selecionar assentos e comprar ingressos | Somente `client` |
+| Meus ingressos | Somente `client` |
+| Painel e ações do organizador | Somente `organizer` |
+| Portaria e validação de ingresso | Somente `gate` |
+| Link de ingresso compartilhado | Público, mediante token assinado válido |
+
+Visitantes que tentarem abrir uma página privada são enviados ao login. Usuários autenticados com uma role diferente são enviados à página pública de eventos.
+
 ## Exclusão de eventos
 
 O organizador pode excluir somente eventos criados por ele. A operação segue estas regras:
@@ -171,7 +186,7 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, além das regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
+Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, matriz de acesso por role e regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
 
 ## Deploy
 

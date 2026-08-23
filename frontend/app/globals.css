@@ -433,10 +433,19 @@ label {
   color: #666d78;
   cursor: not-allowed;
 }
+.seat.view-only:not(.taken) {
+  cursor: default;
+}
 .seat-selection-summary {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+.purchase-restriction {
+  margin: 20px 0 0;
+}
+.purchase-restriction p {
+  margin: 0 0 12px;
 }
 .seat-selection-summary span {
   max-width: min(600px, 70vw);

@@ -3,14 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearSession, getUser } from "../lib/api";
-
-type User = {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-};
+import { clearSession, type SessionUser } from "../lib/api";
 
 const roleLabels: Record<string, string> = {
   client: "Cliente",
@@ -18,28 +11,11 @@ const roleLabels: Record<string, string> = {
   gate: "Portaria",
 };
 
-export default function UserMenu() {
-  const [user, setUser] = useState<User | null>(null);
+export default function UserMenu({ user }: { user: SessionUser | null }) {
   const [open, setOpen] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    function updateUser() {
-      setUser(getUser());
-    }
-
-    updateUser();
-
-    window.addEventListener("auth-changed", updateUser);
-    window.addEventListener("storage", updateUser);
-
-    return () => {
-      window.removeEventListener("auth-changed", updateUser);
-      window.removeEventListener("storage", updateUser);
-    };
-  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -57,7 +33,6 @@ export default function UserMenu() {
 
   function logout() {
     clearSession();
-    setUser(null);
     setOpen(false);
 
     router.push("/login");

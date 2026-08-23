@@ -1,6 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
-import UserMenu from "../components/UserMenu";
+import HeaderNav from "../components/HeaderNav";
 
 export const metadata = {
   title: "Elite Events",
@@ -24,13 +24,7 @@ export default function RootLayout({
           <Link href="/" className="brand">
             ELITE<span>EVENTS</span>
           </Link>
-          <nav>
-            <Link href="/events">Eventos</Link>
-            <Link href="/tickets">Meus ingressos</Link>
-            <Link href="/organizer">Organizador</Link>
-            <Link href="/gate">Portaria</Link>
-            <UserMenu />
-          </nav>
+          <HeaderNav />
         </header>
         <main className="shell">{children}</main>
       </body>
