@@ -99,7 +99,7 @@ def create_event(payload: EventCreate, user: User = Depends(role_required("organ
 
 @app.get("/organizer/events", response_model=list[EventOut])
 def organizer_events(user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
-    return list(db.scalars(select(Event).where(Event.organizer_id == user.id).order_by(Event.starts_at.desc())).all())
+    return list(db.scalars(select(Event).where(Event.organizer_id == user.id).order_by(Event.starts_at)).all())
 
 @app.patch("/organizer/events/{event_id}", response_model=EventOut)
 def update_event(event_id: int, payload: EventCreate, user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
