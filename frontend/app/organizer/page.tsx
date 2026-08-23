@@ -393,14 +393,25 @@ export default function Organizer() {
                 className="event-card-image organizer-event-image"
               />
             )}
-            <h3>{e.title}</h3>
-            <p className="muted">
+            <h3 className="card-text-single" title={e.title}>
+              {e.title}
+            </h3>
+            <p
+              className="muted card-text-single"
+              title={new Date(e.starts_at).toLocaleString("pt-BR", {
+                dateStyle: "short",
+                timeStyle: "short",
+              })}
+            >
               {new Date(e.starts_at).toLocaleString("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
               })}
             </p>
-            <p className="muted">
+            <p
+              className="muted card-text-single"
+              title={`${e.location} · R$ ${(e.price_cents / 100).toFixed(2)}`}
+            >
               {e.location} · R$ {(e.price_cents / 100).toFixed(2)}
             </p>
             <button

@@ -163,10 +163,47 @@ label {
   font-size: 28px;
   font-weight: 900;
 }
+.event-card {
+  height: 650px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.event-card .row {
+  min-width: 0;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+.event-card .pill {
+  max-width: none;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.event-card .price {
+  min-width: 9ch;
+  max-width: none;
+  flex: 0 1 auto;
+  text-align: right;
+}
 .event-card h3 {
   margin: 8px 0 10px;
   font-size: 24px;
+  line-height: 1.2;
   letter-spacing: -0.04em;
+}
+.event-card h3,
+.event-card p {
+  flex-shrink: 0;
+}
+.event-card p {
+  line-height: 1.4;
+}
+.event-card .card-text-multiline {
+  min-height: 4.2em;
+}
+.event-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
 }
 .catalog-results {
   display: grid;
@@ -254,19 +291,38 @@ label {
   object-fit: contain;
 }
 .event-card-image {
-  aspect-ratio: 2 / 3;
+  height: 330px;
+  flex: 0 0 330px;
   margin-bottom: 16px;
+  background: #f0ede8;
+  object-fit: contain;
 }
 .organizer-event-image {
   display: block;
   width: 50%;
+  height: 240px;
+  flex-basis: 240px;
   margin-right: auto;
   margin-left: auto;
 }
 .organizer-event-card {
+  height: 470px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  overflow: hidden;
+}
+.card-text-single {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-text-multiline {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 .event-detail-image {
   max-height: 360px;
