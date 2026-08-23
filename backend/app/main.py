@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 from .config import settings
 from .db import get_db, initialize_database
@@ -110,6 +110,40 @@ def update_event(event_id: int, payload: EventCreate, user: User = Depends(role_
         setattr(event, k, v)
     db.commit(); db.refresh(event)
     return event
+
+@app.delete("/organizer/events/{event_id}")
+def delete_event(event_id: int, user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Evento não encontrado.")
+    if event.organizer_id != user.id:
+        raise HTTPException(403, "Você só pode excluir seus próprios eventos.")
+
+    starts_at = event.starts_at
+    if starts_at.tzinfo is None or starts_at.utcoffset() is None:
+        starts_at = starts_at.replace(tzinfo=timezone.utc)
+    is_past_event = starts_at <= datetime.now(timezone.utc)
+
+    if not is_past_event:
+        active_reservation = db.scalar(
+            select(Reservation.id)
+            .where(
+                Reservation.event_id == event.id,
+                Reservation.status.in_(("pending", "confirmed")),
+            )
+            .limit(1)
+        )
+        if active_reservation:
+            raise HTTPException(
+                409,
+                "Eventos futuros com reservas ativas não podem ser excluídos.",
+            )
+
+    db.execute(delete(Ticket).where(Ticket.event_id == event.id))
+    db.execute(delete(Reservation).where(Reservation.event_id == event.id))
+    db.delete(event)
+    db.commit()
+    return {"message": "Evento excluído com sucesso."}
 
 @app.get("/external/catalog")
 def external_catalog(source: str = Query(pattern="^tmdb$"), q: str = Query(min_length=1, max_length=200)):

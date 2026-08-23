@@ -116,6 +116,21 @@ body {
   background: #f0ede8;
   color: var(--ink);
 }
+.btn.danger {
+  background: #fde3e0;
+  color: #9d2118;
+}
+.btn.danger:hover {
+  background: #f8cbc5;
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.organizer-delete-button {
+  width: 100%;
+  margin-top: 10px;
+}
 input,
 select,
 textarea {
@@ -247,6 +262,11 @@ label {
   width: 50%;
   margin-right: auto;
   margin-left: auto;
+}
+.organizer-event-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 .event-detail-image {
   max-height: 360px;

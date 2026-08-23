@@ -44,6 +44,7 @@ export default function Organizer() {
   >("idle");
   const [lastCatalogQuery, setLastCatalogQuery] = useState("");
   const [error, setError] = useState("");
+  const [deletingEventId, setDeletingEventId] = useState<number | null>(null);
   const minimumEventDate = new Date(Date.now() + 24 * HOUR_IN_MS);
   minimumEventDate.setSeconds(0, 0);
   minimumEventDate.setMinutes(minimumEventDate.getMinutes() + 1);
@@ -133,6 +134,23 @@ export default function Organizer() {
       load();
     } catch (error) {
       setError(getErrorMessage(error));
+    }
+  }
+  async function removeEvent(event: any) {
+    const confirmed = window.confirm(
+      `Deseja realmente excluir o evento “${event.title}”?`,
+    );
+    if (!confirmed) return;
+
+    setError("");
+    setDeletingEventId(event.id);
+    try {
+      await api(`/organizer/events/${event.id}`, { method: "DELETE" });
+      setEvents((current) => current.filter((item) => item.id !== event.id));
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setDeletingEventId(null);
     }
   }
   return (
@@ -365,7 +383,7 @@ export default function Organizer() {
       </div>
       <div style={{ marginTop: 18 }} className="grid">
         {events.map((e) => (
-          <div className="card" key={e.id}>
+          <div className="card organizer-event-card" key={e.id}>
             {e.image_url && (
               <Image
                 src={e.image_url}
@@ -385,6 +403,14 @@ export default function Organizer() {
             <p className="muted">
               {e.location} · R$ {(e.price_cents / 100).toFixed(2)}
             </p>
+            <button
+              type="button"
+              className="btn danger organizer-delete-button"
+              onClick={() => removeEvent(e)}
+              disabled={deletingEventId === e.id}
+            >
+              {deletingEventId === e.id ? "Excluindo…" : "Excluir evento"}
+            </button>
           </div>
         ))}
       </div>

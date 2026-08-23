@@ -13,7 +13,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 - **QR:** `qrcode.react` no cliente e token JWT assinado no backend.
 - **Leitura:** `html5-qrcode`, com digitação manual como fallback.
 - **Infra:** Docker Compose.
-- **Testes:** pytest (regras de assinatura do ingresso e integridade do token).
+- **Testes:** pytest (ingressos, validação de eventos e regras de exclusão).
 
 ## Como rodar com Docker
 
@@ -104,6 +104,18 @@ Os limites são validados no formulário e novamente pela API. Título, descriç
 
 A busca no catálogo do TMDb aceita consultas de até 200 caracteres.
 
+## Exclusão de eventos
+
+O organizador pode excluir somente eventos criados por ele. A operação segue estas regras:
+
+- evento futuro sem reserva ativa pode ser excluído;
+- evento futuro com reserva `pending` ou `confirmed` não pode ser excluído;
+- reservas canceladas ou recusadas não bloqueiam a exclusão, pois o assento já voltou ao estoque;
+- evento passado pode ser excluído mesmo que tenha reservas;
+- ao excluir um evento passado, ingressos, reservas e assentos relacionados também são removidos.
+
+O endpoint protegido é `DELETE /organizer/events/{event_id}`. Tentativas de excluir eventos de outro organizador retornam `403`; eventos futuros com reservas ativas retornam `409`.
+
 ## Decisões técnicas importantes
 
 ### 1. Mapa de assentos em vez de pista por quantidade
@@ -140,14 +152,20 @@ O mapa abre um WebSocket por evento. Depois de uma reserva ou cancelamento, o ba
 
 ## Testes
 
-Com Python 3.12 e dependências instaladas:
+Com o ambiente Docker de desenvolvimento:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend python -m pytest -q
+```
+
+Ou com Python 3.12 e dependências instaladas:
 
 ```bash
 cd backend
 pytest -q
 ```
 
-Os testes focam a regra mais sensível do ingresso: token assinado, identidade do ticket e detecção de adulteração.
+Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, além das regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
 
 ## Deploy
 
