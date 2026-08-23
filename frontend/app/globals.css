@@ -433,6 +433,17 @@ label {
   color: #666d78;
   cursor: not-allowed;
 }
+.seat-selection-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.seat-selection-summary span {
+  max-width: min(600px, 70vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .status {
   padding: 16px 18px;
   border-radius: 14px;
@@ -452,8 +463,19 @@ label {
   gap: 18px;
   align-items: center;
 }
+.ticket-grid {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(520px, 100%), 1fr)
+  );
+}
+.ticket > div {
+  min-width: 0;
+}
 .ticket img,
 .ticket svg {
+  max-width: 100%;
+  height: auto;
   background: #fff;
   padding: 8px;
   border-radius: 10px;

@@ -75,6 +75,8 @@ function translateBackendMessage(detail: string) {
     "Invalid token": "Sua sessão é inválida ou expirou. Entre novamente.",
     "User not found": "O usuário da sessão não foi encontrado.",
     "Insufficient role": "Seu perfil não tem permissão para realizar esta ação.",
+    "Invalid ticket": "O ingresso é inválido ou foi adulterado.",
+    "Ticket not found": "Ingresso não encontrado.",
   };
 
   if (messages[detail]) return messages[detail];

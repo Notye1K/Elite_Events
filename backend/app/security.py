@@ -26,9 +26,21 @@ def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
 
 
-def create_ticket_token(ticket_id: int, event_id: int, jti: str) -> str:
-    now = datetime.now(timezone.utc)
-    payload = {"ticket_id": ticket_id, "event_id": event_id, "jti": jti, "iat": now}
+def create_ticket_token(
+    ticket_id: int,
+    event_id: int,
+    jti: str,
+    issued_at: datetime | None = None,
+) -> str:
+    issued_at = issued_at or datetime.now(timezone.utc)
+    if issued_at.tzinfo is None or issued_at.utcoffset() is None:
+        issued_at = issued_at.replace(tzinfo=timezone.utc)
+    payload = {
+        "ticket_id": ticket_id,
+        "event_id": event_id,
+        "jti": jti,
+        "iat": int(issued_at.timestamp()),
+    }
     return jwt.encode(payload, settings.ticket_secret, algorithm="HS256")
 
 

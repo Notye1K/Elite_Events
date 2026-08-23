@@ -92,6 +92,17 @@ class ReservationCreate(BaseModel):
     seat_id: int
     payment: str = Field(pattern="^(approve|decline)$")
 
+class ReservationBatchCreate(BaseModel):
+    seat_ids: list[int] = Field(min_length=1, max_length=1000)
+    payment: str = Field(pattern="^(approve|decline)$")
+
+    @field_validator("seat_ids")
+    @classmethod
+    def require_distinct_seats(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("não pode conter assentos repetidos")
+        return value
+
 class ReservationOut(BaseModel):
     id: int
     status: str

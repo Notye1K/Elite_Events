@@ -152,29 +152,88 @@ def external_catalog(source: str = Query(pattern="^tmdb$"), q: str = Query(min_l
     except Exception as exc:
         raise HTTPException(502, f"External catalog error: {exc}") from exc
 
-@app.post("/reservations", response_model=ReservationOut)
-async def reserve(payload: ReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
-    seat = db.scalar(select(Seat).where(Seat.id == payload.seat_id).with_for_update())
-    if not seat or seat.status != "available":
-        raise HTTPException(409, "Seat is no longer available")
-    event = db.get(Event, seat.event_id)
-    if not event or not event.published:
-        raise HTTPException(404, "Event not found")
-    reservation = Reservation(event_id=event.id, seat_id=seat.id, user_id=user.id, status="pending", payment_status="pending")
-    db.add(reservation); seat.status = "reserved"
-    if payload.payment == "decline":
-        reservation.status = "cancelled"; reservation.payment_status = "declined"; seat.status = "available"
-        db.commit()
-        await manager.broadcast(event.id, {"type": "seat_updated", "seat_id": seat.id, "status": seat.status})
-        return reservation_to_out(reservation)
-    reservation.status = "confirmed"; reservation.payment_status = "paid"
-    ticket, _ = build_ticket(db, reservation, event, user.id)
-    db.commit(); db.refresh(ticket); db.refresh(reservation)
-    await manager.broadcast(event.id, {"type": "seat_updated", "seat_id": seat.id, "status": seat.status})
-    return reservation_to_out(reservation, ticket.id)
-
 def reservation_to_out(reservation: Reservation, ticket_id: int | None = None):
     return ReservationOut(id=reservation.id, status=reservation.status, payment_status=reservation.payment_status, ticket_id=ticket_id)
+
+async def reserve_seats(
+    seat_ids: list[int],
+    payment: str,
+    user: User,
+    db: Session,
+) -> list[ReservationOut]:
+    ordered_seat_ids = sorted(seat_ids)
+    seats = list(
+        db.scalars(
+            select(Seat)
+            .where(Seat.id.in_(ordered_seat_ids))
+            .order_by(Seat.id)
+            .with_for_update()
+        ).all()
+    )
+    if len(seats) != len(ordered_seat_ids) or any(
+        seat.status != "available" for seat in seats
+    ):
+        raise HTTPException(409, "Um ou mais assentos não estão mais disponíveis.")
+
+    event_ids = {seat.event_id for seat in seats}
+    if len(event_ids) != 1:
+        raise HTTPException(400, "Todos os assentos devem pertencer ao mesmo evento.")
+
+    event = db.get(Event, seats[0].event_id)
+    if not event or not event.published:
+        raise HTTPException(404, "Evento não encontrado.")
+
+    reservations_with_tickets: list[tuple[Reservation, Ticket | None]] = []
+    for seat in seats:
+        reservation = Reservation(
+            event_id=event.id,
+            seat_id=seat.id,
+            user_id=user.id,
+            status="pending",
+            payment_status="pending",
+        )
+        db.add(reservation)
+        seat.status = "reserved"
+        db.flush()
+
+        if payment == "decline":
+            reservation.status = "cancelled"
+            reservation.payment_status = "declined"
+            seat.status = "available"
+            ticket = None
+        else:
+            reservation.status = "confirmed"
+            reservation.payment_status = "paid"
+            ticket, _ = build_ticket(db, reservation, event, user.id)
+
+        reservations_with_tickets.append((reservation, ticket))
+
+    db.commit()
+    results = []
+    for reservation, ticket in reservations_with_tickets:
+        db.refresh(reservation)
+        if ticket:
+            db.refresh(ticket)
+        results.append(
+            reservation_to_out(reservation, ticket.id if ticket else None)
+        )
+
+    for seat in seats:
+        await manager.broadcast(
+            event.id,
+            {"type": "seat_updated", "seat_id": seat.id, "status": seat.status},
+        )
+
+    return results
+
+@app.post("/reservations", response_model=ReservationOut)
+async def reserve(payload: ReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+    results = await reserve_seats([payload.seat_id], payload.payment, user, db)
+    return results[0]
+
+@app.post("/reservations/batch", response_model=list[ReservationOut])
+async def reserve_batch(payload: ReservationBatchCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+    return await reserve_seats(payload.seat_ids, payload.payment, user, db)
 
 @app.post("/reservations/{reservation_id}/cancel", response_model=ReservationOut)
 async def cancel_reservation(reservation_id: int, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
@@ -197,11 +256,23 @@ def my_tickets(user: User = Depends(role_required("client")), db: Session = Depe
     stmt = select(Ticket, Event.title, Seat.label).join(Event, Event.id == Ticket.event_id).join(Reservation, Reservation.id == Ticket.reservation_id).join(Seat, Seat.id == Reservation.seat_id).where(Ticket.user_id == user.id).order_by(Ticket.id.desc())
     rows = db.execute(stmt).all()
     out = []
+    repaired_legacy_hash = False
     from .config import settings
     from .security import create_ticket_token
     for ticket, title, seat_label in rows:
-        token = create_ticket_token(ticket.id, ticket.event_id, ticket.code_jti)
+        token = create_ticket_token(
+            ticket.id,
+            ticket.event_id,
+            ticket.code_jti,
+            ticket.created_at,
+        )
+        stable_token_hash = token_hash(token)
+        if ticket.token_hash != stable_token_hash:
+            ticket.token_hash = stable_token_hash
+            repaired_legacy_hash = True
         out.append(TicketOut(id=ticket.id, event_id=ticket.event_id, event_title=title, seat_label=seat_label, token=token, status=ticket.status, share_url=f"{settings.frontend_url}/share/{token}", used_at=ticket.used_at))
+    if repaired_legacy_hash:
+        db.commit()
     return out
 
 @app.get("/share/{token}", response_model=TicketOut)

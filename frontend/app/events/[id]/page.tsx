@@ -9,12 +9,20 @@ export default function EventDetail() {
   const router = useRouter();
   const [event, setEvent] = useState<any>();
   const [seats, setSeats] = useState<any[]>([]);
-  const [selected, setSelected] = useState<number>();
+  const [selected, setSelected] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   async function load() {
     setEvent(await api(`/events/${id}`));
-    setSeats(await api(`/events/${id}/seats`));
+    const loadedSeats = await api(`/events/${id}/seats`);
+    setSeats(loadedSeats);
+    setSelected((current) =>
+      current.filter((seatId) =>
+        loadedSeats.some(
+          (seat: any) => seat.id === seatId && seat.status === "available",
+        ),
+      ),
+    );
   }
   useEffect(() => {
     load();
@@ -23,10 +31,16 @@ export default function EventDetail() {
     );
     ws.onmessage = (m) => {
       const p = JSON.parse(m.data);
-      if (p.seat_id)
+      if (p.seat_id) {
         setSeats((s) =>
           s.map((x) => (x.id === p.seat_id ? { ...x, status: p.status } : x)),
         );
+        if (p.status !== "available") {
+          setSelected((current) =>
+            current.filter((seatId) => seatId !== p.seat_id),
+          );
+        }
+      }
     };
     return () => ws.close();
   }, [id]);
@@ -35,29 +49,49 @@ export default function EventDetail() {
     seatsPerVisualRow * 22 + (seatsPerVisualRow - 1) * 4,
     280,
   );
-  const selectedSeatIndex = seats.findIndex((seat) => seat.id === selected);
+  const selectedSeatLabels = selected
+    .map((seatId) => {
+      const seatIndex = seats.findIndex((seat) => seat.id === seatId);
+      return seatIndex >= 0
+        ? `${seatIndex + 1} (${seats[seatIndex].label})`
+        : null;
+    })
+    .filter(Boolean)
+    .join(", ");
   if (!event) return <div className="card">Carregando…</div>;
+  function toggleSeat(seatId: number) {
+    setSelected((current) =>
+      current.includes(seatId)
+        ? current.filter((selectedId) => selectedId !== seatId)
+        : [...current, seatId],
+    );
+    setError("");
+    setMessage("");
+  }
   async function reserve(payment: string) {
     if (!getUser()) {
       router.push("/login");
       return;
     }
-    if (!selected) {
-      setError("Escolha um assento.");
+    if (selected.length === 0) {
+      setError("Escolha pelo menos um assento.");
       return;
     }
     setError("");
     setMessage("");
     try {
-      const r = await api("/reservations", {
+      const reservations = await api("/reservations/batch", {
         method: "POST",
-        body: JSON.stringify({ seat_id: selected, payment }),
+        body: JSON.stringify({ seat_ids: selected, payment }),
       });
-      if (r.status === "cancelled") {
-        setError("Pagamento recusado. O lugar voltou ao estoque.");
+      if (reservations.every((reservation: any) => reservation.status === "cancelled")) {
+        setError("Pagamento recusado. Os lugares voltaram ao estoque.");
         return;
       }
-      setMessage("Pagamento aprovado. Ingresso criado.");
+      setMessage(
+        `Pagamento aprovado. ${reservations.length} ${reservations.length === 1 ? "ingresso criado" : "ingressos criados"}.`,
+      );
+      setSelected([]);
       setTimeout(() => router.push("/tickets"), 600);
     } catch (e: any) {
       setError(e.message);
@@ -121,10 +155,11 @@ export default function EventDetail() {
                 <button
                   key={s.id}
                   disabled={s.status !== "available"}
-                  onClick={() => setSelected(s.id)}
-                  className={`seat ${s.status !== "available" ? "taken" : ""} ${selected === s.id ? "selected" : ""}`}
+                  onClick={() => toggleSeat(s.id)}
+                  className={`seat ${s.status !== "available" ? "taken" : ""} ${selected.includes(s.id) ? "selected" : ""}`}
                   title={`Lugar ${index + 1} (${s.label})`}
                   aria-label={`Lugar ${index + 1}, assento ${s.label}`}
+                  aria-pressed={selected.includes(s.id)}
                 >
                   {index + 1}
                 </button>
@@ -134,12 +169,17 @@ export default function EventDetail() {
         </div>
         <div className="row" style={{ marginTop: 20 }}>
           <div>
-            {selected ? (
-              <b>
-                Selecionado: lugar {selectedSeatIndex + 1} ({seats[selectedSeatIndex]?.label})
-              </b>
+            {selected.length > 0 ? (
+              <div className="seat-selection-summary">
+                <b>
+                  {selected.length} {selected.length === 1 ? "assento selecionado" : "assentos selecionados"}
+                </b>
+                <span className="muted" title={selectedSeatLabels}>
+                  Lugares: {selectedSeatLabels}
+                </span>
+              </div>
             ) : (
-              <span className="muted">Selecione um lugar</span>
+              <span className="muted">Selecione um ou mais lugares</span>
             )}
           </div>
           <div className="row">

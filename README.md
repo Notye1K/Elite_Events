@@ -58,8 +58,8 @@ O seed cria o evento publicado **Noite de Cinema Elite** com 40 lugares.
 
 1. Entre com `cliente1@elite.dev`.
 2. Acesse **Eventos**.
-3. Abra o evento semeado e escolha um assento.
-4. Clique em **Pagar simulado** para aprovar ou **Simular recusa** para testar a devolução imediata do lugar ao estoque.
+3. Abra o evento semeado e escolha um ou mais assentos. Cada clique alterna o lugar entre selecionado e desmarcado.
+4. Clique em **Pagar simulado** para aprovar o grupo ou **Simular recusa** para testar a devolução imediata de todos os lugares ao estoque.
 5. Abra **Meus ingressos** para ver o QR e o link compartilhável.
 6. Abra o link em outra aba ou dispositivo para testar a visualização pública do ingresso.
 7. Cancele uma compra por API se quiser demonstrar devolução ao estoque: `POST /reservations/{id}/cancel`.
@@ -124,13 +124,17 @@ Escolhi o mapa porque ele torna a regra de não vender o mesmo lugar duas vezes 
 
 Na tela de compra, os lugares usam numeração visual contínua e são distribuídos em até 40 colunas, centralizadas em relação à tela/palco. Em dispositivos menores, o mapa permite rolagem horizontal para preservar a legibilidade e a área de toque de cada assento.
 
+O cliente pode selecionar e desmarcar vários lugares antes do pagamento. A compra múltipla usa `POST /reservations/batch` e cria um ingresso individual para cada assento aprovado.
+
 ### 2. Concorrência no estoque
 
-Cada lugar é uma linha `Seat`. Na reserva, o backend executa `SELECT ... FOR UPDATE` no assento e só muda `available → reserved` dentro da mesma transação. O estado físico do lugar fica centralizado no banco, evitando que duas requisições confirmem o mesmo assento.
+Cada lugar é uma linha `Seat`. Na reserva, o backend executa `SELECT ... FOR UPDATE` nos assentos, em ordem estável, e só muda `available → reserved` dentro da mesma transação. Em uma compra múltipla, todos os lugares são validados antes da primeira alteração: se um deles não estiver disponível, o lote inteiro é recusado. O estado físico dos lugares fica centralizado no banco, evitando venda dupla e compras parcialmente confirmadas.
 
 ### 3. QR não forjável
 
 O QR não carrega apenas um ID previsível. Ele contém um JWT assinado com segredo exclusivo de ingressos, incluindo `ticket_id`, `event_id` e um `jti` aleatório. O banco guarda o hash do token e o `jti`; a portaria valida assinatura, identidade e estado persistido antes de marcar o ingresso como usado.
+
+O `iat` do JWT é derivado da data persistida de criação do ingresso. Assim, a tela **Meus ingressos** sempre reconstrói exatamente o mesmo token e o link compartilhável continua compatível com o hash salvo no banco. Ao listar ingressos antigos, o backend corrige automaticamente hashes criados antes dessa regra.
 
 ### 4. Pagamento simulado
 
@@ -167,7 +171,7 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, além das regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
+Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, além das regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
 
 ## Deploy
 

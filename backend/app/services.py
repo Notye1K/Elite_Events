@@ -34,7 +34,7 @@ def build_ticket(db: Session, reservation: Reservation, event: Event, user_id: i
     )
     db.add(ticket)
     db.flush()
-    token = create_ticket_token(ticket.id, event.id, jti)
+    token = create_ticket_token(ticket.id, event.id, jti, ticket.created_at)
     ticket.token_hash = token_hash(token)
     return ticket, token
 

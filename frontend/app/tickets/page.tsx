@@ -1,5 +1,54 @@
-'use client';
-import {useEffect,useState} from 'react';
-import {QRCodeSVG} from 'qrcode.react';
-import {api} from '../../lib/api';
-export default function Tickets(){const [tickets,setTickets]=useState<any[]>([]);const [error,setError]=useState('');async function load(){try{setTickets(await api('/tickets'))}catch(e:any){setError(e.message)}}useEffect(()=>{load()},[]);return <><div className="hero"><div><div className="eyebrow">Minha carteira</div><h1>Ingressos.</h1><p className="muted">Cada ingresso tem um QR assinado e um link de compartilhamento.</p></div></div>{error?<div className="status bad">{error}</div>:<div className="grid">{tickets.map(t=><div className="card ticket" key={t.id}><div><span className="pill">{t.status}</span><h2>{t.event_title}</h2><p>Assento <b>{t.seat_label}</b></p><a href={t.share_url} target="_blank" className="btn ghost">Abrir link compartilhável</a><p className="mono">{t.token.slice(0,36)}…</p></div><QRCodeSVG value={t.token} size={150}/></div>)}</div>}</>}
+"use client";
+import { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { api } from "../../lib/api";
+
+export default function Tickets() {
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  async function load() {
+    try {
+      setTickets(await api("/tickets"));
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+  useEffect(() => {
+    load();
+  }, []);
+  return (
+    <>
+      <div className="hero">
+        <div>
+          <div className="eyebrow">Minha carteira</div>
+          <h1>Ingressos.</h1>
+          <p className="muted">
+            Cada ingresso tem um QR assinado e um link de compartilhamento.
+          </p>
+        </div>
+      </div>
+      {error ? (
+        <div className="status bad">{error}</div>
+      ) : (
+        <div className="grid ticket-grid">
+          {tickets.map((t) => (
+            <div className="card ticket" key={t.id}>
+              <div>
+                <span className="pill">{t.status}</span>
+                <h2>{t.event_title}</h2>
+                <p>
+                  Assento <b>{t.seat_label}</b>
+                </p>
+                <a href={t.share_url} target="_blank" className="btn ghost">
+                  Abrir link compartilhável
+                </a>
+                <p className="mono">{t.token.slice(0, 36)}…</p>
+              </div>
+              <QRCodeSVG value={t.token} size={150} />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
