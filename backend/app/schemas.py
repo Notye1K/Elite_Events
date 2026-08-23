@@ -24,12 +24,12 @@ class TokenOut(BaseModel):
     user: UserOut
 
 class EventCreate(BaseModel):
-    title: str
-    description: str = ""
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
     image_url: str | None = None
     event_type: str = "seated"
     starts_at: datetime
-    location: str
+    location: str = Field(min_length=1, max_length=255)
     capacity: int = Field(gt=0, le=1000)
     price_cents: int = Field(ge=0)
     published: bool = False

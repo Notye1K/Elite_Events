@@ -201,6 +201,7 @@ export default function Organizer() {
               <input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
+                required
               />
             </label>
             <label>
@@ -210,6 +211,7 @@ export default function Organizer() {
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
+                required
               />
             </label>
             <label>
@@ -231,6 +233,7 @@ export default function Organizer() {
               <input
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
+                required
               />
             </label>
             <div className="grid">
