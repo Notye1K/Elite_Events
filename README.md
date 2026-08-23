@@ -6,7 +6,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 
 ## Stack
 
-- **Frontend:** Next.js 15, React 19, TypeScript, CSS próprio.
+- **Frontend:** Next.js 16, React 19, TypeScript, CSS próprio.
 - **Backend:** FastAPI, SQLAlchemy, PyJWT.
 - **Banco:** PostgreSQL 17.
 - **Integrações:** Ticketmaster Discovery API e TMDb (chaves opcionais).

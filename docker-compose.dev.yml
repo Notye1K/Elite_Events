@@ -1,10 +1,13 @@
 services:
   frontend:
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
-    command: npm run dev
+    command: npm run dev -- --webpack
 
   backend:
     volumes:
