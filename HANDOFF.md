@@ -7,7 +7,7 @@ Projeto completo do desafio em monorepo:
 - backend FastAPI + SQLAlchemy;
 - PostgreSQL via Docker Compose;
 - RBAC de organizador/cliente/portaria;
-- catálogo Ticketmaster/TMDb;
+- catálogo externo TMDb;
 - mapa de assentos com lock transacional;
 - pagamento simulado aprovado/recusado;
 - cancelamento com devolução de estoque;

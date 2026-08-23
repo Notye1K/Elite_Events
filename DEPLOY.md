@@ -44,7 +44,6 @@ TICKET_SECRET
 FRONTEND_URL
 CORS_ORIGINS
 TMDB_API_KEY (opcional)
-TICKETMASTER_API_KEY (opcional)
 ```
 
 8. Faça o deploy.

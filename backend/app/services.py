@@ -40,32 +40,58 @@ def build_ticket(db: Session, reservation: Reservation, event: Event, user_id: i
 
 
 def catalog_search(source: str, query: str):
-    if source == "ticketmaster":
-        if not settings.ticketmaster_api_key:
-            return {"source": source, "configured": False, "items": []}
-        url = "https://app.ticketmaster.com/discovery/v2/events.json"
-        params = {"apikey": settings.ticketmaster_api_key, "keyword": query, "size": 12}
-        r = httpx.get(url, params=params, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        events = data.get("_embedded", {}).get("events", [])
-        return {"source": source, "configured": True, "items": [
-            {"id": e.get("id"), "title": e.get("name"), "date": (e.get("dates", {}).get("start", {}).get("localDate")),
-             "venue": ((e.get("_embedded", {}).get("venues") or [{}])[0].get("name")),
-             "image": ((e.get("images") or [{}])[0].get("url"))}
-            for e in events
-        ]}
     if source == "tmdb":
         if not settings.tmdb_api_key:
-            return {"source": source, "configured": False, "items": []}
+            return {
+                "source": source,
+                "configured": False,
+                "items": []
+            }
+
         url = "https://api.themoviedb.org/3/search/movie"
-        params = {"api_key": settings.tmdb_api_key, "query": query, "language": "pt-BR", "page": 1}
-        r = httpx.get(url, params=params, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        return {"source": source, "configured": True, "items": [
-            {"id": str(e.get("id")), "title": e.get("title"), "date": e.get("release_date"),
-             "venue": "Cinema", "image": f"https://image.tmdb.org/t/p/w500{e.get('poster_path')}" if e.get("poster_path") else None}
-            for e in data.get("results", [])[:12]
-        ]}
+
+        headers = {
+            "Authorization": f"Bearer {settings.tmdb_api_key}",
+            "accept": "application/json",
+        }
+
+        params = {
+            "query": query,
+            "include_adult": False,
+            "language": "pt-BR",
+            "page": 1,
+            "region": "BR",
+        }
+
+        response = httpx.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=10,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        return {
+            "source": source,
+            "configured": True,
+            "items": [
+                {
+                    "id": str(movie.get("id")),
+                    "title": movie.get("title"),
+                    "original_title": movie.get("original_title"),
+                    "overview": movie.get("overview"),
+                    "date": movie.get("release_date"),
+                    "image": (
+                        f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
+                        if movie.get("poster_path")
+                        else None
+                    ),
+                    "vote_average": movie.get("vote_average"),
+                }
+                for movie in data.get("results", [])[:12]
+            ],
+        }
     raise ValueError("Unknown catalog source")

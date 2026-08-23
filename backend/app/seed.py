@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
-from .db import Base, engine, SessionLocal
+from .db import initialize_database, SessionLocal
 from .models import Event, User
 from .security import hash_password
 from .services import create_event_seats
@@ -13,7 +13,7 @@ USERS = [
 ]
 
 def run():
-    Base.metadata.create_all(bind=engine)
+    initialize_database()
     db = SessionLocal()
     try:
         users = {}

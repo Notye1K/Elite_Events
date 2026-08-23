@@ -14,7 +14,7 @@
 - [x] Portaria com câmera
 - [x] Digitação manual
 - [x] Válido / inválido / já utilizado / evento errado
-- [x] Ticketmaster/TMDb adapter
+- [x] Adaptador TMDb
 - [x] RBAC com 3 papéis
 - [x] Persistência
 - [x] Proteção contra venda duplicada

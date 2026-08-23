@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from .config import settings
-from .db import Base, engine, get_db, SessionLocal
+from .db import get_db, initialize_database
 from .deps import current_user, role_required
 from .models import Event, Reservation, Seat, Ticket, User
 from .schemas import *
@@ -43,7 +43,7 @@ manager = ConnectionManager()
 
 @app.on_event("startup")
 def startup():
-    Base.metadata.create_all(bind=engine)
+    initialize_database()
 
 @app.get("/health")
 def health():
@@ -107,7 +107,7 @@ def update_event(event_id: int, payload: EventCreate, user: User = Depends(role_
     return event
 
 @app.get("/external/catalog")
-def external_catalog(source: str = Query(pattern="^(ticketmaster|tmdb)$"), q: str = Query(min_length=1)):
+def external_catalog(source: str = Query(pattern="^tmdb$"), q: str = Query(min_length=1)):
     try:
         return catalog_search(source, q)
     except Exception as exc:

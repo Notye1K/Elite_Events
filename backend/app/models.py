@@ -21,6 +21,7 @@ class Event(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, default="")
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     event_type: Mapped[str] = mapped_column(String(30), default="seated")
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     location: Mapped[str] = mapped_column(String(255))

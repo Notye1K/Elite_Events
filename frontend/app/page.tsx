@@ -1,6 +1,63 @@
-import Link from 'next/link';
+import Link from "next/link";
 
-export default function Home(){return <>
-  <section className="hero"><div><div className="eyebrow">Eventos sem atrito</div><h1>Do catálogo à portaria, sem pontos cegos.</h1><p className="muted">Uma jornada curta: descobrir, escolher lugar, pagar simulado, receber QR e validar na entrada.</p><div className="row" style={{justifyContent:'flex-start',marginTop:22}}><Link className="btn accent" href="/events">Explorar eventos</Link><Link className="btn ghost" href="/login">Entrar</Link></div></div><div className="card"><div className="pill">Projeto do desafio</div><p>Next.js no front, FastAPI no back, PostgreSQL, QR assinado, WebSocket de assentos e Docker Compose.</p><div className="big-stat">3 papéis</div><p className="muted">Organizador · Cliente · Portaria</p></div></section>
-  <div className="grid"><div className="card"><div className="eyebrow">Cliente</div><h3>Compra que não duplica</h3><p className="muted">O assento é reservado dentro de transação e bloqueado no banco antes da confirmação.</p></div><div className="card"><div className="eyebrow">Organizador</div><h3>Catálogo externo</h3><p className="muted">O evento pode nascer de resultados do Ticketmaster ou TMDb e ganhar data, local, capacidade e preço próprios.</p></div><div className="card"><div className="eyebrow">Portaria</div><h3>Resposta sem ambiguidade</h3><p className="muted">A validação retorna válido, inválido, já utilizado ou evento errado.</p></div></div>
-</>}
+export default function Home() {
+  return (
+    <>
+      <section className="hero">
+        <div>
+          <div className="eyebrow">Eventos sem atrito</div>
+          <h1>Do catálogo à portaria, sem pontos cegos.</h1>
+          <p className="muted">
+            Uma jornada curta: descobrir, escolher lugar, pagar simulado,
+            receber QR e validar na entrada.
+          </p>
+          <div
+            className="row"
+            style={{ justifyContent: "flex-start", marginTop: 22 }}
+          >
+            <Link className="btn accent" href="/events">
+              Explorar eventos
+            </Link>
+            <Link className="btn ghost" href="/login">
+              Entrar
+            </Link>
+          </div>
+        </div>
+        <div className="card">
+          <div className="pill">Projeto do desafio</div>
+          <p>
+            Next.js no front, FastAPI no back, PostgreSQL, QR assinado,
+            WebSocket de assentos e Docker Compose.
+          </p>
+          <div className="big-stat">3 papéis</div>
+          <p className="muted">Organizador · Cliente · Portaria</p>
+        </div>
+      </section>
+      <div className="grid">
+        <div className="card">
+          <div className="eyebrow">Cliente</div>
+          <h3>Compra que não duplica</h3>
+          <p className="muted">
+            O assento é reservado dentro de transação e bloqueado no banco antes
+            da confirmação.
+          </p>
+        </div>
+        <div className="card">
+          <div className="eyebrow">Organizador</div>
+          <h3>Catálogo externo</h3>
+          <p className="muted">
+            O evento pode nascer de resultados do TMDb e ganhar data, local,
+            capacidade e preço próprios.
+          </p>
+        </div>
+        <div className="card">
+          <div className="eyebrow">Portaria</div>
+          <h3>Resposta sem ambiguidade</h3>
+          <p className="muted">
+            A validação retorna válido, inválido, já utilizado ou evento errado.
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}

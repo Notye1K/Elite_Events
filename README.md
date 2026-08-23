@@ -9,7 +9,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 - **Frontend:** Next.js 16, React 19, TypeScript, CSS próprio.
 - **Backend:** FastAPI, SQLAlchemy, PyJWT.
 - **Banco:** PostgreSQL 17.
-- **Integrações:** Ticketmaster Discovery API e TMDb (chaves opcionais).
+- **Integração externa:** TMDb (chave opcional).
 - **QR:** `qrcode.react` no cliente e token JWT assinado no backend.
 - **Leitura:** `html5-qrcode`, com digitação manual como fallback.
 - **Infra:** Docker Compose.
@@ -18,7 +18,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 ## Como rodar com Docker
 
 1. Copie `.env.example` para `.env`.
-2. Opcionalmente preencha `TICKETMASTER_API_KEY` e/ou `TMDB_API_KEY`.
+2. Opcionalmente preencha `TMDB_API_KEY` para habilitar o catálogo externo de filmes.
 3. Rode:
 
 ```bash
@@ -77,7 +77,7 @@ O seed cria o evento publicado **Noite de Cinema Elite** com 40 lugares.
 
 ## Catálogo externo
 
-O endpoint `GET /external/catalog` recebe `source=ticketmaster|tmdb` e `q=<texto>`.
+O projeto usa o **TMDb** como catálogo externo de filmes. O endpoint `GET /external/catalog` recebe `source=tmdb` e `q=<texto>`.
 
 Exemplo:
 
@@ -216,7 +216,6 @@ Variáveis opcionais:
 
 ```text
 TMDB_API_KEY=...
-TICKETMASTER_API_KEY=...
 ```
 
 O Dockerfile do backend respeita automaticamente a variável `$PORT` fornecida pelo Render.

@@ -23,7 +23,6 @@ services:
       TICKET_SECRET: local-ticket-change-me
       FRONTEND_URL: http://localhost:3000
       CORS_ORIGINS: http://localhost:3000
-      TICKETMASTER_API_KEY: ${TICKETMASTER_API_KEY:-}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
     ports:
       - "8000:8000"

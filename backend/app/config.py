@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     jwt_exp_minutes: int = 60 * 12
     ticket_secret: str = "change-me-ticket-secret"
     frontend_url: str = "http://localhost:3000"
-    ticketmaster_api_key: str | None = None
     tmdb_api_key: str | None = None
     cors_origins: str = "http://localhost:3000"
 
