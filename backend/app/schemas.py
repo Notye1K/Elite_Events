@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
 class UserCreate(BaseModel):
     name: str
@@ -26,7 +26,7 @@ class TokenOut(BaseModel):
 class EventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1)
-    image_url: str | None = None
+    image_url: AnyHttpUrl | None = None
     event_type: str = "seated"
     starts_at: datetime
     location: str = Field(min_length=1, max_length=255)

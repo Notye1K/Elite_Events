@@ -242,6 +242,12 @@ label {
   aspect-ratio: 2 / 3;
   margin-bottom: 16px;
 }
+.organizer-event-image {
+  display: block;
+  width: 50%;
+  margin-right: auto;
+  margin-left: auto;
+}
 .event-detail-image {
   max-height: 360px;
   margin-bottom: 18px;
@@ -440,6 +446,49 @@ label {
 
 .user-menu-logout:hover {
   background: #fde3e0;
+}
+.error-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 17, 20, 0.58);
+  backdrop-filter: blur(3px);
+}
+.error-popup {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid #efb4ad;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+.error-popup-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fde3e0;
+  color: #9d2118;
+  font-size: 24px;
+  font-weight: 900;
+}
+.error-popup h2 {
+  margin: 0 0 8px;
+}
+.error-popup p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+.error-popup .btn {
+  justify-self: end;
 }
 @media (max-width: 760px) {
   .hero {

@@ -41,6 +41,11 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+def event_data(payload: EventCreate):
+    data = payload.model_dump()
+    data["image_url"] = str(payload.image_url) if payload.image_url else None
+    return data
+
 @app.on_event("startup")
 def startup():
     initialize_database()
@@ -88,7 +93,7 @@ def get_seats(event_id: int, db: Session = Depends(get_db)):
 
 @app.post("/organizer/events", response_model=EventOut)
 def create_event(payload: EventCreate, user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
-    event = Event(**payload.model_dump(), organizer_id=user.id)
+    event = Event(**event_data(payload), organizer_id=user.id)
     db.add(event); db.flush(); create_event_seats(db, event); db.commit(); db.refresh(event)
     return event
 
@@ -101,7 +106,7 @@ def update_event(event_id: int, payload: EventCreate, user: User = Depends(role_
     event = db.get(Event, event_id)
     if not event or event.organizer_id != user.id:
         raise HTTPException(404, "Event not found")
-    for k, v in payload.model_dump().items():
+    for k, v in event_data(payload).items():
         setattr(event, k, v)
     db.commit(); db.refresh(event)
     return event

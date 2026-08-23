@@ -1,7 +1,17 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { api, ApiError, getErrorMessage } from "../../lib/api";
+
+function isValidImageUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export default function Organizer() {
   const [events, setEvents] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -27,13 +37,23 @@ export default function Organizer() {
   async function load() {
     try {
       setEvents(await api("/organizer/events"));
-    } catch (e: any) {
-      setError(e.message);
+    } catch (error) {
+      setError(getErrorMessage(error));
     }
   }
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    if (!error) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setError("");
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [error]);
   async function search() {
     if (catalogStatus === "loading") return;
 
@@ -54,18 +74,19 @@ export default function Organizer() {
         `/external/catalog?source=tmdb&q=${encodeURIComponent(query)}`,
       );
       if (!r.configured) {
-        throw new Error("A integração com o TMDb não está configurada.");
+        throw new ApiError("A integração com o TMDb não está configurada.");
       }
       setCatalog(r.items);
       setCatalogStatus(r.items.length > 0 ? "success" : "empty");
-    } catch (e: any) {
+    } catch (error) {
       setCatalog([]);
       setCatalogStatus("idle");
-      setError(e.message);
+      setError(getErrorMessage(error));
     }
   }
   async function create(e: any) {
     e.preventDefault();
+    setError("");
     try {
       await api("/organizer/events", {
         method: "POST",
@@ -74,6 +95,7 @@ export default function Organizer() {
           starts_at: new Date(form.starts_at).toISOString(),
           capacity: Number(form.capacity),
           price_cents: Number(form.price_cents),
+          image_url: form.image_url.trim() || null,
         }),
       });
       setForm({
@@ -92,12 +114,42 @@ export default function Organizer() {
       setCatalogStatus("idle");
       setLastCatalogQuery("");
       load();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (error) {
+      setError(getErrorMessage(error));
     }
   }
   return (
     <>
+      {error && (
+        <div
+          className="error-popup-backdrop"
+          onMouseDown={() => setError("")}
+        >
+          <section
+            className="error-popup"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="error-popup-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="error-popup-icon" aria-hidden="true">
+              !
+            </div>
+            <div>
+              <h2 id="error-popup-title">Não foi possível concluir</h2>
+              <p>{error}</p>
+            </div>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => setError("")}
+              autoFocus
+            >
+              Entendi
+            </button>
+          </section>
+        </div>
+      )}
       <div className="hero">
         <div>
           <div className="eyebrow">Back office</div>
@@ -111,11 +163,6 @@ export default function Organizer() {
           <p className="muted">eventos próprios</p>
         </div>
       </div>
-      {error && (
-        <div className="status bad" style={{ marginBottom: 16 }}>
-          {error}
-        </div>
-      )}
       <div className="grid">
         <div className="card">
           <h2>Encontre um filme do TMDb</h2>
@@ -187,7 +234,7 @@ export default function Organizer() {
         <div className="card">
           <h2>Novo evento</h2>
           <form className="form" onSubmit={create}>
-            {form.image_url && (
+            {isValidImageUrl(form.image_url) && (
               <Image
                 src={form.image_url}
                 alt={`Pôster selecionado para ${form.title}`}
@@ -213,6 +260,18 @@ export default function Organizer() {
                 }
                 required
               />
+            </label>
+            <label>
+              Imagem (URL)
+              <input
+                type="url"
+                value={form.image_url}
+                placeholder="https://exemplo.com/imagem.jpg"
+                onChange={(e) =>
+                  setForm({ ...form, image_url: e.target.value })
+                }
+              />
+              <span className="muted">Opcional. Use uma URL HTTP ou HTTPS.</span>
             </label>
             <label>
               Data/hora
@@ -284,13 +343,16 @@ export default function Organizer() {
                 alt={`Pôster de ${e.title}`}
                 width={500}
                 height={750}
-                className="event-card-image"
+                className="event-card-image organizer-event-image"
               />
             )}
-            <span className="pill">
-              {e.published ? "publicado" : "rascunho"}
-            </span>
             <h3>{e.title}</h3>
+            <p className="muted">
+              {new Date(e.starts_at).toLocaleString("pt-BR", {
+                dateStyle: "short",
+                timeStyle: "short",
+              })}
+            </p>
             <p className="muted">
               {e.location} · R$ {(e.price_cents / 100).toFixed(2)}
             </p>
