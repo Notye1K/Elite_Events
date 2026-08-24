@@ -10,6 +10,11 @@ const resultLabels: Record<string, string> = {
   event_wrong: "Evento incorreto",
 };
 
+const eventDateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
 export default function Gate() {
   const [code, setCode] = useState("");
   const [eventId, setEventId] = useState("1");
@@ -19,11 +24,16 @@ export default function Gate() {
   useEffect(() => {
     api("/events")
       .then((loadedEvents: any[]) => {
-        const sortedEvents = [...loadedEvents].sort((first, second) =>
-          first.title.localeCompare(second.title, "pt-BR", {
+        const sortedEvents = [...loadedEvents].sort((first, second) => {
+          const titleComparison = first.title.localeCompare(second.title, "pt-BR", {
             sensitivity: "base",
-          }),
-        );
+          });
+          return (
+            titleComparison ||
+            new Date(first.starts_at).getTime() -
+              new Date(second.starts_at).getTime()
+          );
+        });
         setEvents(sortedEvents);
         setEventId((current) =>
           sortedEvents.some((event) => String(event.id) === current)
@@ -94,7 +104,7 @@ export default function Gate() {
             >
               {events.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.title}
+                  {e.title} — {eventDateTimeFormatter.format(new Date(e.starts_at))}
                 </option>
               ))}
             </select>

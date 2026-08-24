@@ -2,7 +2,7 @@
 
 Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no frontend, **FastAPI + Python** no backend e **PostgreSQL** como banco. O fluxo foi desenhado para passar pelo cenário completo: catálogo externo → publicação → busca → escolha de assento ou quantidade → Checkout Stripe em sandbox → ingresso com QR → compartilhamento → validação de portaria.
 
-> O desafio pede um fluxo ponta a ponta simples e completo, documentação clara e dados semeados. Os opcionais também foram implementados: busca/filtro, painel do organizador, cancelamento com devolução ao estoque, mapa de assentos em atualização em tempo real, Docker Compose, testes e preparação para deploy.
+> O desafio pede um fluxo ponta a ponta simples e completo, documentação clara e dados semeados. Os opcionais também foram implementados: busca, painel do organizador, cancelamento com devolução ao estoque, mapa de assentos em atualização em tempo real, Docker Compose, testes e preparação para deploy.
 
 **Demonstração publicada:** [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/)
 
@@ -83,8 +83,6 @@ Copie o segredo `whsec_...` exibido pela Stripe CLI para `STRIPE_WEBHOOK_SECRET`
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --force-recreate backend
 ```
-
-Mantenha o `stripe listen` aberto durante o teste. Em produção, cadastre `https://SEU-BACKEND.onrender.com/payments/stripe/webhook` no Workbench da Stripe e selecione `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` e `checkout.session.expired`.
 
 Se a criação do pagamento falhar, acompanhe o backend em outro terminal:
 
@@ -276,17 +274,7 @@ O CD não é duplicado no GitHub Actions: Vercel e Render já observam o reposit
 
 URL publicada: [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/)
 
-1. Importe o diretório `frontend`.
-2. Defina `NEXT_PUBLIC_API_URL` para a URL pública da API.
-3. Build: `npm run build`.
-4. Start: `npm start`.
-
 ### Backend — Render / Railway / Fly.io
-
-1. Publique `backend` como serviço Python.
-2. Crie um PostgreSQL gerenciado.
-3. Configure `DATABASE_URL`, `JWT_SECRET`, `TICKET_SECRET`, `FRONTEND_URL`, `CORS_ORIGINS`, as chaves externas e as credenciais de teste da Stripe.
-4. Comando de inicialização: `python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 
 A aplicação foi organizada para separação de responsabilidades entre frontend e API, de forma que o frontend possa estar na Vercel e o backend em outro provedor.
 
@@ -317,135 +305,8 @@ GitHub
 
 O `docker-compose.yml` continua sendo o caminho recomendado para avaliação local. O deploy público usa os mesmos diretórios e não depende de manter um único servidor para todo o monorepo.
 
-### 1. Banco PostgreSQL no Supabase
-
-Crie um projeto gratuito no Supabase e copie a conexão PostgreSQL. Para o SQLAlchemy/psycopg, use o formato:
-
-```text
-postgresql+psycopg://USUARIO:SENHA@HOST:5432/postgres?sslmode=require
-```
-
-Se o painel fornecer uma URL `postgresql://`, adapte o prefixo para `postgresql+psycopg://` antes de colocar em `DATABASE_URL`.
-
-> O projeto cria as tabelas automaticamente no primeiro boot. Para um projeto real eu usaria Alembic; para este desafio, o objetivo é reduzir o atrito de avaliação.
-
-### 2. Backend no Render
-
-Há um `render.yaml` na raiz que pode ser usado como referência/Blueprint.
-
-Configuração manual equivalente:
-
-- **Type:** Web Service
-- **Runtime:** Docker
-- **Root Directory:** `backend`
-- **Plan:** Free
-- **Health Check:** `/health`
-
-Variáveis obrigatórias:
-
-```text
-DATABASE_URL=postgresql+psycopg://...
-JWT_SECRET=<segredo longo e aleatório>
-TICKET_SECRET=<outro segredo longo e aleatório>
-FRONTEND_URL=https://SEU-PROJETO.vercel.app
-CORS_ORIGINS=https://SEU-PROJETO.vercel.app
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_CURRENCY=brl
-STRIPE_CHECKOUT_EXPIRATION_MINUTES=30
-STRIPE_TEST_MODE=true
-APP_ENV=production
-APP_TIMEZONE=America/Sao_Paulo
-```
-
-Variáveis opcionais:
-
-```text
-TMDB_API_KEY=...
-TICKETMASTER_API_KEY=...
-```
-
-O Dockerfile do backend respeita automaticamente a variável `$PORT` fornecida pelo Render.
-
-Teste após o deploy:
-
-```text
-https://SEU-BACKEND.onrender.com/health
-```
-
-Deve responder:
-
-```json
-{"status":"ok"}
-```
-
-O seed é idempotente e roda no boot, portanto os quatro usuários de avaliação e o evento de demonstração são criados sem exigir uma etapa manual de migração/seed.
-
-### 3. Frontend na Vercel
-
-Crie um projeto na Vercel apontando para o mesmo repositório GitHub.
-
-No projeto da Vercel:
-
-- **Root Directory:** `frontend`
-- Framework detectado: **Next.js**
-- Build: `npm run build`
-- Start: `npm start`
-- Variável de ambiente:
-
-```text
-NEXT_PUBLIC_API_URL=https://SEU-BACKEND.onrender.com
-```
-
-O arquivo `frontend/vercel.json` deixa explícito que o diretório é um projeto Next.js.
-
-Depois de obter a URL da Vercel, volte ao Render e configure:
-
-```text
-FRONTEND_URL=https://SEU-PROJETO.vercel.app
-CORS_ORIGINS=https://SEU-PROJETO.vercel.app
-```
-
-Isso é necessário porque o backend usa `FRONTEND_URL` para gerar links compartilháveis dos ingressos e `CORS_ORIGINS` para aceitar as chamadas do navegador.
-
-### 4. WebSocket em produção
-
-O mapa de assentos usa:
-
-```text
-/ws/events/{event_id}/seats
-```
-
-O frontend converte automaticamente `http://` em `ws://` e `https://` em `wss://`. Assim, no deploy HTTPS, a conexão passa a ser segura sem nenhuma configuração manual adicional no frontend.
-
-O Render mantém a conexão WebSocket do serviço FastAPI; o banco continua sendo a fonte de verdade para o status dos assentos.
-
-### 5. Checklist de deploy
-
-- [ ] Criar repositório público no GitHub.
-- [ ] Fazer push de todo o monorepo.
-- [ ] Criar PostgreSQL no Supabase.
-- [ ] Criar API no Render com `backend` como Root Directory.
-- [ ] Configurar `DATABASE_URL`, `JWT_SECRET`, `TICKET_SECRET`.
-- [ ] Configurar `STRIPE_SECRET_KEY` de teste no Render.
-- [ ] Cadastrar o webhook do Render na Stripe e configurar `STRIPE_WEBHOOK_SECRET`.
-- [ ] Criar frontend na Vercel com `frontend` como Root Directory.
-- [ ] Configurar `NEXT_PUBLIC_API_URL`.
-- [ ] Copiar a URL da Vercel para `FRONTEND_URL` e `CORS_ORIGINS` no Render.
-- [ ] Abrir `/health` do backend.
-- [ ] Fazer login com `cliente1@elite.dev` / `123456`.
-- [ ] Comprar um assento usando um cartão de teste da Stripe.
-- [ ] Confirmar QR em **Meus ingressos**.
-- [ ] Abrir a URL compartilhável.
-- [ ] Entrar como `portaria@elite.dev` / `123456` e validar o QR.
-- [ ] Validar novamente para demonstrar `already_used`.
-
-### 6. Limitações do free tier que devem ser conhecidas
+### 1. Limitações do free tier que devem ser conhecidas
 
 O backend gratuito pode dormir quando fica sem tráfego e demorar alguns segundos para acordar na primeira requisição. Isso é aceitável para o cenário de avaliação, mas deve ser mencionado ao avaliador caso ele abra o projeto após um período sem acesso.
 
 O banco gratuito também tem limites de armazenamento/uso. O desafio é pequeno e o seed contém apenas um evento e poucos usuários, portanto a carga esperada é baixa.
-
-### 7. Alternativa: tudo no Render
-
-Também é possível hospedar o frontend como Web Service Node no Render e manter o backend no Render. Ainda assim, para este desafio eu prefiro **Vercel + Render + Supabase**, porque o Next.js fica no ambiente mais natural para ele, a API fica isolada e o PostgreSQL não depende do banco efêmero/free de um PaaS.

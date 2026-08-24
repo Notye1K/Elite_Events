@@ -25,14 +25,3 @@ Projeto completo do desafio em monorepo:
 ## Publicação
 
 O frontend está publicado em [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/). A Vercel e o Render fazem o deploy automaticamente a partir da branch conectada; o GitHub Actions executa as verificações de CI antes da entrega.
-
-## Próximo passo antes da entrega
-
-Confirme que todas as alterações locais foram versionadas e enviadas ao repositório público:
-
-```bash
-git status
-git push origin main
-```
-
-Depois, confira o CI no GitHub, o deploy do Render e o deploy da Vercel.
