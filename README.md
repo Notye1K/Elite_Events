@@ -6,6 +6,8 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 
 **Demonstração publicada:** [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/)
 
+**Documentação da API:** [Swagger — Backend](https://elite-events-vf12.onrender.com/docs)
+
 ## Stack
 
 - **Frontend:** Next.js 16, React 19, TypeScript, CSS próprio.
