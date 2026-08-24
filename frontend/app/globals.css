@@ -70,6 +70,9 @@ body {
   align-items: end;
   margin-bottom: 40px;
 }
+.home-hero {
+  grid-template-columns: 1fr;
+}
 .hero h1 {
   font-size: clamp(46px, 7vw, 84px);
   line-height: 0.92;
@@ -427,6 +430,26 @@ label {
   opacity: 0.42;
   filter: blur(3px) saturate(0.85);
   transform: scale(1.03);
+}
+.events-page-background-image.is-rotating {
+  animation: events-background-cycle 7s ease-in-out infinite;
+}
+@keyframes events-background-cycle {
+  0% {
+    opacity: 0;
+  }
+  12%,
+  82% {
+    opacity: 0.42;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .events-page-background-image.is-rotating {
+    animation: none;
+  }
 }
 .event-detail-content {
   position: relative;

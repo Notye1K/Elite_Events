@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function Home() {
   return (
     <>
-      <section className="hero">
+      <section className="hero home-hero">
         <div>
           <div className="eyebrow">Eventos sem atrito</div>
           <h1>Do catálogo à portaria, sem pontos cegos.</h1>
@@ -22,15 +22,6 @@ export default function Home() {
               Entrar
             </Link>
           </div>
-        </div>
-        <div className="card">
-          <div className="pill">Projeto do desafio</div>
-          <p>
-            Next.js no front, FastAPI no back, PostgreSQL, QR assinado,
-            WebSocket de assentos e Docker Compose.
-          </p>
-          <div className="big-stat">3 papéis</div>
-          <p className="muted">Organizador · Cliente · Portaria</p>
         </div>
       </section>
       <div className="grid">
