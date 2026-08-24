@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import get_db, initialize_database
 from .deps import current_user, role_required
+from .event_time import is_event_from_previous_day
 from .models import Event, Reservation, Seat, Ticket, User
 from .schemas import *
 from .security import create_access_token, decode_ticket_token, hash_password, token_hash, verify_password
@@ -182,6 +183,11 @@ async def reserve_seats(
     event = db.get(Event, seats[0].event_id)
     if not event or not event.published:
         raise HTTPException(404, "Evento não encontrado.")
+    if is_event_from_previous_day(event.starts_at):
+        raise HTTPException(
+            409,
+            "Não é possível reservar ingressos para eventos de dias anteriores.",
+        )
 
     reservations_with_tickets: list[tuple[Reservation, Ticket | None]] = []
     for seat in seats:
@@ -307,6 +313,15 @@ def validate_ticket(payload: GateValidationIn, user: User = Depends(role_require
         return GateValidationOut(result="invalid", message="Ingresso não encontrado")
     if ticket.event_id != payload.event_id:
         return GateValidationOut(result="event_wrong", message="Ingresso pertence a outro evento", ticket_id=ticket.id)
+    event = db.get(Event, ticket.event_id)
+    if not event:
+        return GateValidationOut(result="invalid", message="Evento não encontrado", ticket_id=ticket.id)
+    if is_event_from_previous_day(event.starts_at):
+        return GateValidationOut(
+            result="invalid",
+            message="Não é possível validar ingressos de eventos de dias anteriores",
+            ticket_id=ticket.id,
+        )
     if ticket.status == "used":
         return GateValidationOut(result="already_used", message="Ingresso já utilizado", ticket_id=ticket.id)
     if ticket.status != "valid":

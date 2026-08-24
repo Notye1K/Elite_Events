@@ -174,6 +174,14 @@ O link público contém o mesmo token assinado do QR. Assim não existe um segun
 
 O mapa abre um WebSocket por evento. Depois de uma reserva ou cancelamento, o backend publica `seat_updated`; clientes conectados refletem o novo estado sem precisar recarregar a página.
 
+### 7. Janela de validação na portaria
+
+Considerei permitir que a portaria validasse o ingresso somente no horário exato do evento, mas optei por uma regra menos rígida para não tornar a aplicação e o fluxo de demonstração pouco práticos. Reservas e validações na portaria são bloqueadas para eventos de dias anteriores; eventos do dia atual continuam liberados mesmo que o horário de início já tenha passado, e eventos futuros também permanecem liberados.
+
+A comparação usa o dia civil no fuso `America/Sao_Paulo`, configurável por `APP_TIMEZONE`. O backend aplica a regra como fonte de verdade: uma tentativa de reserva para data anterior retorna `409`, e a portaria responde como ingresso inválido sem marcar o ingresso como utilizado. A tela de assentos também desabilita antecipadamente a seleção nesses eventos.
+
+Em uma aplicação de produção, essa regra poderia ser retomada como uma janela configurável pelo organizador, por exemplo permitindo a entrada algumas horas antes do início e encerrando a validação após o término do evento.
+
 ## Segurança e limites conscientemente assumidos
 
 - JWT de sessão tem expiração e deve usar segredos fortes em produção.
@@ -197,7 +205,7 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, cancelamento de ingressos, matriz de acesso por role e regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
+Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, cancelamento de ingressos, matriz de acesso por role, bloqueio de reservas e validações para dias anteriores, permissão para o dia atual e datas futuras e regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
 
 ## Deploy
 
@@ -277,6 +285,7 @@ JWT_SECRET=<segredo longo e aleatório>
 TICKET_SECRET=<outro segredo longo e aleatório>
 FRONTEND_URL=https://SEU-PROJETO.vercel.app
 CORS_ORIGINS=https://SEU-PROJETO.vercel.app
+APP_TIMEZONE=America/Sao_Paulo
 ```
 
 Variáveis opcionais:

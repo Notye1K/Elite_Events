@@ -18,7 +18,19 @@ export default function Gate() {
   const scanner = useRef<Html5Qrcode | null>(null);
   useEffect(() => {
     api("/events")
-      .then(setEvents)
+      .then((loadedEvents: any[]) => {
+        const sortedEvents = [...loadedEvents].sort((first, second) =>
+          first.title.localeCompare(second.title, "pt-BR", {
+            sensitivity: "base",
+          }),
+        );
+        setEvents(sortedEvents);
+        setEventId((current) =>
+          sortedEvents.some((event) => String(event.id) === current)
+            ? current
+            : String(sortedEvents[0]?.id ?? ""),
+        );
+      })
       .catch(() => {});
     return () => {
       scanner.current?.stop().catch(() => {});

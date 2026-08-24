@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, getUser, type SessionUser } from "../../../lib/api";
+import { isEventFromPreviousDay } from "../../../lib/eventTime";
 
 export default function EventDetail() {
   const { id } = useParams();
@@ -78,9 +79,12 @@ export default function EventDetail() {
     })
     .filter(Boolean)
     .join(", ");
+  const eventFromPreviousDay = Boolean(
+    event && isEventFromPreviousDay(event.starts_at),
+  );
   if (!event) return <div className="card">Carregando…</div>;
   function toggleSeat(seatId: number) {
-    if (currentUser?.role !== "client") return;
+    if (currentUser?.role !== "client" || eventFromPreviousDay) return;
     setSelected((current) =>
       current.includes(seatId)
         ? current.filter((selectedId) => selectedId !== seatId)
@@ -97,6 +101,10 @@ export default function EventDetail() {
     }
     if (user.role !== "client") {
       setError("Somente clientes podem comprar ingressos.");
+      return;
+    }
+    if (eventFromPreviousDay) {
+      setError("Não é possível reservar ingressos para eventos de dias anteriores.");
       return;
     }
     if (selected.length === 0) {
@@ -181,12 +189,16 @@ export default function EventDetail() {
                 <button
                   key={s.id}
                   disabled={
-                    s.status !== "available" || currentUser?.role !== "client"
+                    s.status !== "available" ||
+                    currentUser?.role !== "client" ||
+                    eventFromPreviousDay
                   }
                   onClick={() => toggleSeat(s.id)}
-                  className={`seat ${s.status !== "available" ? "taken" : ""} ${currentUser?.role !== "client" ? "view-only" : ""} ${selected.includes(s.id) ? "selected" : ""}`}
+                  className={`seat ${s.status !== "available" ? "taken" : ""} ${currentUser?.role !== "client" || eventFromPreviousDay ? "view-only" : ""} ${selected.includes(s.id) ? "selected" : ""}`}
                   title={
-                    currentUser?.role === "client"
+                    eventFromPreviousDay
+                      ? `Lugar ${index + 1} (${s.label}) — reservas encerradas para este evento`
+                      : currentUser?.role === "client"
                       ? `Lugar ${index + 1} (${s.label})`
                       : `Lugar ${index + 1} (${s.label}) — compra exclusiva para clientes`
                   }
@@ -201,6 +213,12 @@ export default function EventDetail() {
         </div>
         {!sessionChecked ? (
           <p className="muted purchase-restriction">Verificando sessão…</p>
+        ) : eventFromPreviousDay ? (
+          <div className="purchase-restriction">
+            <p className="muted">
+              As reservas estão encerradas porque este evento ocorreu em um dia anterior.
+            </p>
+          </div>
         ) : currentUser?.role === "client" ? (
           <div className="row" style={{ marginTop: 20 }}>
             <div>

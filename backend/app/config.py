@@ -1,5 +1,6 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 class Settings(BaseSettings):
     app_name: str = "Elite Dev Events API"
@@ -10,6 +11,16 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     tmdb_api_key: str | None = None
     cors_origins: str = "http://localhost:3000"
+    app_timezone: str = "America/Sao_Paulo"
+
+    @field_validator("app_timezone")
+    @classmethod
+    def validate_app_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("must be a valid IANA timezone") from exc
+        return value
 
     @field_validator("database_url")
     @classmethod

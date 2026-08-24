@@ -21,3 +21,5 @@ services:
         sync: false
       - key: TMDB_API_KEY
         sync: false
+      - key: APP_TIMEZONE
+        value: America/Sao_Paulo
