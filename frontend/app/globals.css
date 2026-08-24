@@ -325,18 +325,58 @@ label {
 }
 .organizer-event-image {
   display: block;
-  width: 50%;
-  height: 240px;
-  flex-basis: 240px;
-  margin-right: auto;
-  margin-left: auto;
+  width: 80%;
+  height: 100%;
+  flex: none;
+  margin: 0;
+  object-fit: contain;
+}
+.organizer-event-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
 }
 .organizer-event-card {
-  height: 470px;
+  height: 600px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   overflow: hidden;
+}
+.organizer-event-media {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border-radius: 14px;
+}
+.organizer-event-content {
+  min-width: 0;
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+}
+.organizer-event-content h3,
+.organizer-event-content p {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.35;
+}
+.organizer-event-content h3 {
+  font-size: 22px;
+}
+.organizer-event-date {
+  white-space: nowrap;
+}
+.organizer-event-meta {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+.organizer-event-meta > span {
+  white-space: nowrap;
+  font-weight: 800;
 }
 .card-text-single {
   min-width: 0;

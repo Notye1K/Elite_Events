@@ -7,6 +7,10 @@ const HOUR_IN_MS = 60 * 60 * 1000;
 const DAY_IN_MS = 24 * HOUR_IN_MS;
 const MAX_EVENT_ADVANCE_DAYS = 3650;
 const MAX_EVENT_PRICE_CENTS = 10_000_000;
+const priceFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
 function toDateTimeLocal(date: Date) {
   const localTime = date.getTime() - date.getTimezoneOffset() * 60_000;
@@ -381,47 +385,53 @@ export default function Organizer() {
           </form>
         </div>
       </div>
-      <div style={{ marginTop: 18 }} className="grid">
+      <div style={{ marginTop: 18 }} className="grid organizer-event-grid">
         {events.map((e) => (
           <div className="card organizer-event-card" key={e.id}>
-            {e.image_url && (
-              <Image
-                src={e.image_url}
-                alt={`Pôster de ${e.title}`}
-                width={500}
-                height={750}
-                className="event-card-image organizer-event-image"
-              />
-            )}
-            <h3 className="card-text-single" title={e.title}>
-              {e.title}
-            </h3>
-            <p
-              className="muted card-text-single"
-              title={new Date(e.starts_at).toLocaleString("pt-BR", {
-                dateStyle: "short",
-                timeStyle: "short",
-              })}
-            >
-              {new Date(e.starts_at).toLocaleString("pt-BR", {
-                dateStyle: "short",
-                timeStyle: "short",
-              })}
-            </p>
-            <p
-              className="muted card-text-single"
-              title={`${e.location} · R$ ${(e.price_cents / 100).toFixed(2)}`}
-            >
-              {e.location} · R$ {(e.price_cents / 100).toFixed(2)}
-            </p>
-            <button
-              type="button"
-              className="btn danger organizer-delete-button"
-              onClick={() => removeEvent(e)}
-              disabled={deletingEventId === e.id}
-            >
-              {deletingEventId === e.id ? "Excluindo…" : "Excluir evento"}
-            </button>
+            <div className="organizer-event-media">
+              {e.image_url && (
+                <Image
+                  src={e.image_url}
+                  alt={`Pôster de ${e.title}`}
+                  width={500}
+                  height={750}
+                  className="event-card-image organizer-event-image"
+                />
+              )}
+            </div>
+            <div className="organizer-event-content">
+              <h3 className="card-text-single" title={e.title}>
+                {e.title}
+              </h3>
+              <p
+                className="muted organizer-event-date"
+                title={new Date(e.starts_at).toLocaleString("pt-BR", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
+              >
+                {new Date(e.starts_at).toLocaleString("pt-BR", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
+              </p>
+              <div className="organizer-event-meta">
+                <p className="muted card-text-single" title={e.location}>
+                  {e.location}
+                </p>
+                <span title={priceFormatter.format(e.price_cents / 100)}>
+                  {priceFormatter.format(e.price_cents / 100)}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn danger organizer-delete-button"
+                onClick={() => removeEvent(e)}
+                disabled={deletingEventId === e.id}
+              >
+                {deletingEventId === e.id ? "Excluindo…" : "Excluir evento"}
+              </button>
+            </div>
           </div>
         ))}
       </div>
