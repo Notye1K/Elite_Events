@@ -10,5 +10,4 @@ coverage.xml
 htmlcov/
 .venv/
 backend/.venv/
-AGENTS.md
 Desafio-Elite-Dev-2026.pdf

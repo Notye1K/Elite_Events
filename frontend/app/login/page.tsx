@@ -46,12 +46,23 @@ export default function Login() {
           {mode !== "login" && (
             <label>
               Nome
-              <input value={name} onChange={(e) => setName(e.target.value)} />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={120}
+              />
             </label>
           )}
           <label>
             Email
-            <input value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              maxLength={255}
+            />
           </label>
           <label>
             Senha
@@ -59,6 +70,9 @@ export default function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={mode === "login" ? 1 : 6}
+              maxLength={72}
             />
           </label>
           {mode !== "login" && (

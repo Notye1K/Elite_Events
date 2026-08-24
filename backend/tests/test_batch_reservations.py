@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.main import cancel_ticket, my_tickets, reserve_batch, share_ticket
+from app.main import cancel_ticket, my_tickets, share_ticket
 from app.models import Event, Reservation, Seat, Ticket, User
-from app.schemas import ReservationBatchCreate
 from app.security import token_hash
+from app.services import build_ticket
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def create_event_with_seats(db: Session) -> tuple[User, list[Seat]]:
     event = Event(
         title="Evento em grupo",
         description="Descrição",
-        event_type="seated",
+        event_type="movie",
         starts_at=datetime.now(timezone.utc) + timedelta(days=2),
         location="Local",
         capacity=3,
@@ -72,61 +72,30 @@ def create_event_with_seats(db: Session) -> tuple[User, list[Seat]]:
     return client, seats
 
 
-def run_batch(
+def create_paid_tickets(
     db: Session,
     client: User,
     seats: list[Seat],
-    payment: str,
 ):
-    payload = ReservationBatchCreate(
-        seat_ids=[seat.id for seat in seats],
-        payment=payment,
-    )
-    return asyncio.run(reserve_batch(payload, client, db))
-
-
-def test_batch_reservation_approves_all_seats_and_creates_one_ticket_each(db: Session):
-    client, seats = create_event_with_seats(db)
-
-    results = run_batch(db, client, seats[:2], "approve")
-
-    assert len(results) == 2
-    assert all(result.status == "confirmed" for result in results)
-    assert all(result.payment_status == "paid" for result in results)
-    assert all(result.ticket_id is not None for result in results)
-    assert all(db.get(Seat, seat.id).status == "reserved" for seat in seats[:2])
-    assert len(list(db.scalars(select(Ticket)).all())) == 2
-
-
-def test_batch_reservation_decline_returns_every_seat_to_stock(db: Session):
-    client, seats = create_event_with_seats(db)
-
-    results = run_batch(db, client, seats[:2], "decline")
-
-    assert len(results) == 2
-    assert all(result.status == "cancelled" for result in results)
-    assert all(result.payment_status == "declined" for result in results)
-    assert all(db.get(Seat, seat.id).status == "available" for seat in seats[:2])
-    assert list(db.scalars(select(Ticket)).all()) == []
-
-
-def test_batch_reservation_is_atomic_when_one_seat_is_unavailable(db: Session):
-    client, seats = create_event_with_seats(db)
-    seats[1].status = "reserved"
+    event = db.get(Event, seats[0].event_id)
+    for seat in seats:
+        seat.status = "reserved"
+        reservation = Reservation(
+            event_id=event.id,
+            seat_id=seat.id,
+            user_id=client.id,
+            status="confirmed",
+            payment_status="paid",
+        )
+        db.add(reservation)
+        db.flush()
+        build_ticket(db, reservation, event, client.id)
     db.commit()
-
-    with pytest.raises(HTTPException) as exc_info:
-        run_batch(db, client, seats[:2], "approve")
-
-    assert exc_info.value.status_code == 409
-    assert db.get(Seat, seats[0].id).status == "available"
-    assert list(db.scalars(select(Reservation)).all()) == []
-    assert list(db.scalars(select(Ticket)).all()) == []
 
 
 def test_listed_ticket_has_stable_token_and_valid_shared_link(db: Session):
     client, seats = create_event_with_seats(db)
-    run_batch(db, client, seats[:1], "approve")
+    create_paid_tickets(db, client, seats[:1])
     ticket = db.scalar(select(Ticket))
 
     ticket.token_hash = "legacy-token-hash"
@@ -144,7 +113,7 @@ def test_listed_ticket_has_stable_token_and_valid_shared_link(db: Session):
 
 def test_client_can_cancel_own_valid_ticket(db: Session):
     client, seats = create_event_with_seats(db)
-    run_batch(db, client, seats[:1], "approve")
+    create_paid_tickets(db, client, seats[:1])
     ticket = db.scalar(select(Ticket))
     reservation = db.get(Reservation, ticket.reservation_id)
 
@@ -159,7 +128,7 @@ def test_client_can_cancel_own_valid_ticket(db: Session):
 
 def test_client_cannot_cancel_another_clients_ticket(db: Session):
     owner, seats = create_event_with_seats(db)
-    run_batch(db, owner, seats[:1], "approve")
+    create_paid_tickets(db, owner, seats[:1])
     ticket = db.scalar(select(Ticket))
     another_client = User(
         name="Outro cliente",
@@ -180,7 +149,7 @@ def test_client_cannot_cancel_another_clients_ticket(db: Session):
 
 def test_client_cannot_cancel_used_ticket(db: Session):
     client, seats = create_event_with_seats(db)
-    run_batch(db, client, seats[:1], "approve")
+    create_paid_tickets(db, client, seats[:1])
     ticket = db.scalar(select(Ticket))
     ticket.status = "used"
     db.commit()

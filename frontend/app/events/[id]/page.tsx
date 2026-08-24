@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ const priceFormatter = new Intl.NumberFormat("pt-BR", {
 const MOVIE_SEATS_PER_ROW = 20;
 const MOVIE_SEAT_MIN_SIZE = 28;
 const MOVIE_SEAT_GAP = 6;
+const MAX_TICKETS_PER_CHECKOUT = 20;
 
 export default function EventDetail() {
   const { id } = useParams();
@@ -30,10 +31,9 @@ export default function EventDetail() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [creatingCheckout, setCreatingCheckout] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     const loadedEvent = await api(`/events/${id}`);
     setEvent(loadedEvent);
 
@@ -43,7 +43,13 @@ export default function EventDetail() {
       setSeats([]);
       setSelected([]);
       setTicketQuantity((current) =>
-        Math.min(current, Math.max(1, loadedAvailability.available)),
+        Math.min(
+          current,
+          Math.max(
+            1,
+            Math.min(loadedAvailability.available, MAX_TICKETS_PER_CHECKOUT),
+          ),
+        ),
       );
       return;
     }
@@ -58,7 +64,7 @@ export default function EventDetail() {
         ),
       ),
     );
-  }
+  }, [id]);
 
   useEffect(() => {
     function updateSession() {
@@ -92,7 +98,13 @@ export default function EventDetail() {
             : current,
         );
         setTicketQuantity((current) =>
-          Math.min(current, Math.max(1, payload.available_count)),
+          Math.min(
+            current,
+            Math.max(
+              1,
+              Math.min(payload.available_count, MAX_TICKETS_PER_CHECKOUT),
+            ),
+          ),
         );
       }
       if (payload.seat_id) {
@@ -111,7 +123,7 @@ export default function EventDetail() {
       }
     };
     return () => ws.close();
-  }, [id]);
+  }, [id, load]);
 
   const isShow = event?.event_type === "show";
   const seatMapMinWidth =
@@ -146,14 +158,12 @@ export default function EventDetail() {
         : [...current, seatId],
     );
     setError("");
-    setMessage("");
   }
 
   function cancelSelection() {
     if (selected.length === 0) return;
     setSelected([]);
     setError("");
-    setMessage("");
   }
 
   async function reserve() {
@@ -182,7 +192,6 @@ export default function EventDetail() {
     }
 
     setError("");
-    setMessage("");
     setCreatingCheckout(true);
     try {
       const checkout = await api("/checkout/sessions", {
@@ -332,13 +341,18 @@ export default function EventDetail() {
                       className="btn ghost"
                       onClick={() =>
                         setTicketQuantity((current) =>
-                          Math.min(availability?.available ?? 1, current + 1),
+                          Math.min(
+                            availability?.available ?? 1,
+                            MAX_TICKETS_PER_CHECKOUT,
+                            current + 1,
+                          ),
                         )
                       }
                       disabled={
                         !availability ||
                         availability.available === 0 ||
-                        ticketQuantity >= availability.available
+                        ticketQuantity >= availability.available ||
+                        ticketQuantity >= MAX_TICKETS_PER_CHECKOUT
                       }
                       aria-label="Aumentar quantidade"
                     >
@@ -417,11 +431,6 @@ export default function EventDetail() {
           {error && (
             <div className="status bad" style={{ marginTop: 16 }}>
               {error}
-            </div>
-          )}
-          {message && (
-            <div className="status ok" style={{ marginTop: 16 }}>
-              {message}
             </div>
           )}
         </div>

@@ -19,8 +19,9 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://elite:elite@db:5432/elite
-      JWT_SECRET: local-jwt-change-me
-      TICKET_SECRET: local-ticket-change-me
+      TEST_DATABASE_URL: postgresql+psycopg://elite:elite@db:5432/elite
+      JWT_SECRET: local-jwt-change-me-at-least-32-bytes
+      TICKET_SECRET: local-ticket-change-me-at-least-32-bytes
       FRONTEND_URL: http://localhost:3000
       CORS_ORIGINS: http://localhost:3000
       TMDB_API_KEY: ${TMDB_API_KEY:-}
@@ -30,7 +31,7 @@ services:
       STRIPE_CURRENCY: brl
       STRIPE_CHECKOUT_EXPIRATION_MINUTES: 30
       STRIPE_TEST_MODE: "true"
-      ENABLE_SIMULATED_PAYMENTS: "false"
+      APP_ENV: development
       APP_TIMEZONE: America/Sao_Paulo
     ports:
       - "8000:8000"

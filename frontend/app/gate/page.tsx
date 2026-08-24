@@ -52,17 +52,26 @@ export default function Gate() {
     if (scanner.current) return;
     const s = new Html5Qrcode("reader");
     scanner.current = s;
-    await s.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 220 },
-      (decoded) => {
-        setCode(decoded);
-        validate(decoded);
-        s.stop().catch(() => {});
-        scanner.current = null;
-      },
-      () => {},
-    );
+    try {
+      await s.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 220 },
+        (decoded) => {
+          setCode(decoded);
+          validate(decoded);
+          s.stop().catch(() => {});
+          scanner.current = null;
+        },
+        () => {},
+      );
+    } catch {
+      scanner.current = null;
+      setResult({
+        result: "invalid",
+        message:
+          "Não foi possível abrir a câmera. Verifique a permissão do navegador ou use o código manual.",
+      });
+    }
   }
   return (
     <>
@@ -98,10 +107,14 @@ export default function Gate() {
             className="row"
             style={{ justifyContent: "flex-start", marginTop: 14 }}
           >
-            <button className="btn primary" onClick={() => validate()}>
+            <button
+              className="btn primary"
+              onClick={() => validate()}
+              disabled={!eventId || !code.trim()}
+            >
               Validar
             </button>
-            <button className="btn ghost" onClick={start}>
+            <button className="btn ghost" onClick={start} disabled={!eventId}>
               Abrir câmera
             </button>
           </div>

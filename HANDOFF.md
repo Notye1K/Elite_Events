@@ -16,22 +16,23 @@ Projeto completo do desafio em monorepo:
 - câmera + entrada manual;
 - WebSocket de assentos;
 - seed;
-- testes unitários;
+- testes automatizados, incluindo concorrência no PostgreSQL;
 - documentação e guia de deploy;
 - checklist de cobertura;
-- registro de uso de IA.
+- registro de uso de IA e arquivo de contexto `AGENTS.md`;
+- CI no GitHub Actions para frontend, backend e Docker Compose.
 
-## Limitação deste ambiente
+## Publicação
 
-Não publiquei um repositório GitHub real porque isso exigiria acesso à conta/repositório do candidato. Também não concluí o `npm install` local durante a verificação; o processo atingiu o limite de execução do ambiente. O projeto, entretanto, inclui Docker Compose para instalar as dependências e executar tudo de forma isolada.
+O frontend está publicado em [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/). A Vercel e o Render fazem o deploy automaticamente a partir da branch conectada; o GitHub Actions executa as verificações de CI antes da entrega.
 
-## Próximo passo de entrega
+## Próximo passo antes da entrega
 
-No repositório GitHub do candidato, faça:
+Confirme que todas as alterações locais foram versionadas e enviadas ao repositório público:
 
 ```bash
-git remote add origin <URL_DO_REPOSITORIO>
-git push -u origin main
+git status
+git push origin main
 ```
 
-Depois configure as variáveis de ambiente do backend/frontend no provedor escolhido e publique.
+Depois, confira o CI no GitHub, o deploy do Render e o deploy da Vercel.

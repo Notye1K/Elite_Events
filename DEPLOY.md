@@ -50,7 +50,8 @@ STRIPE_WEBHOOK_SECRET (`whsec_...` do endpoint cadastrado no Render)
 STRIPE_CURRENCY=brl
 STRIPE_CHECKOUT_EXPIRATION_MINUTES=30
 STRIPE_TEST_MODE=true
-ENABLE_SIMULATED_PAYMENTS=false
+APP_ENV=production
+APP_TIMEZONE=America/Sao_Paulo
 ```
 
 8. Faça o deploy.
@@ -69,6 +70,8 @@ NEXT_PUBLIC_API_URL=https://SEU-BACKEND.onrender.com
 ```
 
 6. Deploy.
+
+URL atual do frontend: [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/)
 
 ### E. Voltar ao Render
 

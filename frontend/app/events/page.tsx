@@ -31,7 +31,7 @@ export default function Events() {
     setEvents(await api(`/events${q ? `?q=${encodeURIComponent(q)}` : ""}`));
   }
   useEffect(() => {
-    load();
+    api("/events").then(setEvents);
   }, []);
   useEffect(() => {
     setBackgroundIndex(0);

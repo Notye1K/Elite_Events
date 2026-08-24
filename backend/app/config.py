@@ -1,13 +1,14 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 class Settings(BaseSettings):
     app_name: str = "Elite Dev Events API"
+    app_env: str = "development"
     database_url: str = "postgresql+psycopg://elite:elite@db:5432/elite"
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = "change-me-in-production-at-least-32-bytes"
     jwt_exp_minutes: int = 60 * 12
-    ticket_secret: str = "change-me-ticket-secret"
+    ticket_secret: str = "change-me-ticket-secret-at-least-32-bytes"
     frontend_url: str = "http://localhost:3000"
     tmdb_api_key: str | None = None
     ticketmaster_api_key: str | None = None
@@ -16,7 +17,6 @@ class Settings(BaseSettings):
     stripe_currency: str = "brl"
     stripe_checkout_expiration_minutes: int = 30
     stripe_test_mode: bool = True
-    enable_simulated_payments: bool = False
     cors_origins: str = "http://localhost:3000"
     app_timezone: str = "America/Sao_Paulo"
 
@@ -52,6 +52,20 @@ class Settings(BaseSettings):
         if value.startswith("postgresql://"):
             return "postgresql+psycopg://" + value[len("postgresql://"):]
         return value
+
+    @model_validator(mode="after")
+    def require_secure_production_secrets(self):
+        if self.app_env.strip().lower() == "production":
+            insecure_values = {
+                "jwt_secret": "change-me-in-production-at-least-32-bytes",
+                "ticket_secret": "change-me-ticket-secret-at-least-32-bytes",
+            }
+            for field_name, insecure_value in insecure_values.items():
+                if getattr(self, field_name) == insecure_value:
+                    raise ValueError(
+                        f"{field_name.upper()} must be configured in production"
+                    )
+        return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -255,6 +255,21 @@ def test_checkout_holds_inventory_until_stripe_confirms(checkout_context):
     assert list(db.scalars(select(Ticket)).all()) == []
 
 
+def test_second_checkout_cannot_hold_an_already_reserved_seat(checkout_context):
+    api_client, db, _, _, another_client, event, seats = checkout_context
+    create_checkout(api_client, event, seats[:1])
+    app.dependency_overrides[current_user] = lambda: another_client
+
+    response = api_client.post(
+        "/checkout/sessions",
+        json={"event_id": event.id, "seat_ids": [seats[0].id]},
+    )
+
+    assert response.status_code == 409
+    assert "não estão mais disponíveis" in response.json()["detail"]
+    assert db.get(Seat, seats[0].id).status == "reserved"
+
+
 def test_paid_webhook_creates_tickets_once_even_when_repeated(checkout_context):
     api_client, db, _, _, _, event, seats = checkout_context
     result = create_checkout(api_client, event, seats)

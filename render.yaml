@@ -33,7 +33,7 @@ services:
         value: "30"
       - key: STRIPE_TEST_MODE
         value: "true"
-      - key: ENABLE_SIMULATED_PAYMENTS
-        value: "false"
+      - key: APP_ENV
+        value: production
       - key: APP_TIMEZONE
         value: America/Sao_Paulo

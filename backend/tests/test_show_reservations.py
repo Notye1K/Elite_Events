@@ -10,13 +10,12 @@ from sqlalchemy.pool import StaticPool
 from app.db import Base
 from app.main import (
     cancel_ticket,
+    create_checkout_session,
     get_event_availability,
     my_tickets,
-    reserve_batch,
-    reserve_general,
 )
 from app.models import Event, Seat, Ticket, User
-from app.schemas import GeneralReservationCreate, ReservationBatchCreate
+from app.schemas import CheckoutCreate
 from app.services import create_event_seats
 
 
@@ -60,7 +59,7 @@ def create_event(
         starts_at=starts_at or datetime.now(timezone.utc) + timedelta(days=2),
         location="Local",
         capacity=capacity,
-        price_cents=1000,
+        price_cents=0,
         published=True,
         organizer_id=organizer.id,
     )
@@ -69,6 +68,28 @@ def create_event(
     create_event_seats(db, event)
     db.commit()
     return client, event
+
+
+def create_free_checkout(
+    db: Session,
+    client: User,
+    event: Event,
+    *,
+    quantity: int | None = None,
+    seat_ids: list[int] | None = None,
+):
+    return asyncio.run(
+        create_checkout_session(
+            CheckoutCreate(
+                event_id=event.id,
+                quantity=quantity,
+                seat_ids=seat_ids or [],
+            ),
+            client,
+            db,
+            None,
+        )
+    )
 
 
 def test_movie_inventory_has_twenty_seats_per_row(db: Session):
@@ -87,21 +108,12 @@ def test_movie_inventory_has_twenty_seats_per_row(db: Session):
 def test_show_purchase_decreases_general_inventory_and_hides_seat(db: Session):
     client, event = create_event(db, "show")
 
-    results = asyncio.run(
-        reserve_general(
-            GeneralReservationCreate(
-                event_id=event.id,
-                quantity=2,
-                payment="approve",
-            ),
-            client,
-            db,
-        )
-    )
+    checkout = create_free_checkout(db, client, event, quantity=2)
 
     availability = get_event_availability(event.id, db)
     tickets = my_tickets(client, db)
-    assert len(results) == 2
+    assert checkout.quantity == 2
+    assert checkout.status == "paid"
     assert availability.available == 1
     assert len(list(db.scalars(select(Ticket)).all())) == 2
     assert all(ticket.event_type == "show" for ticket in tickets)
@@ -110,19 +122,10 @@ def test_show_purchase_decreases_general_inventory_and_hides_seat(db: Session):
 
 def test_cancelling_show_ticket_returns_one_unit_to_inventory(db: Session):
     client, event = create_event(db, "show")
-    result = asyncio.run(
-        reserve_general(
-            GeneralReservationCreate(
-                event_id=event.id,
-                quantity=1,
-                payment="approve",
-            ),
-            client,
-            db,
-        )
-    )[0]
+    checkout = create_free_checkout(db, client, event, quantity=1)
+    ticket_id = checkout.ticket_ids[0]
 
-    asyncio.run(cancel_ticket(result.ticket_id, client, db))
+    asyncio.run(cancel_ticket(ticket_id, client, db))
 
     assert get_event_availability(event.id, db).available == event.capacity
 
@@ -131,17 +134,7 @@ def test_show_purchase_is_atomic_when_inventory_is_insufficient(db: Session):
     client, event = create_event(db, "show")
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            reserve_general(
-                GeneralReservationCreate(
-                    event_id=event.id,
-                    quantity=4,
-                    payment="approve",
-                ),
-                client,
-                db,
-            )
-        )
+        create_free_checkout(db, client, event, quantity=4)
 
     assert exc_info.value.status_code == 409
     assert get_event_availability(event.id, db).available == event.capacity
@@ -156,17 +149,7 @@ def test_show_from_previous_day_cannot_be_purchased(db: Session):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            reserve_general(
-                GeneralReservationCreate(
-                    event_id=event.id,
-                    quantity=1,
-                    payment="approve",
-                ),
-                client,
-                db,
-            )
-        )
+        create_free_checkout(db, client, event, quantity=1)
 
     assert exc_info.value.status_code == 409
     assert get_event_availability(event.id, db).available == event.capacity
@@ -177,16 +160,7 @@ def test_show_cannot_be_purchased_by_internal_inventory_id(db: Session):
     seat = db.scalar(select(Seat).where(Seat.event_id == event.id))
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            reserve_batch(
-                ReservationBatchCreate(
-                    seat_ids=[seat.id],
-                    payment="approve",
-                ),
-                client,
-                db,
-            )
-        )
+        create_free_checkout(db, client, event, seat_ids=[seat.id])
 
     assert exc_info.value.status_code == 400
 
@@ -195,16 +169,6 @@ def test_movie_cannot_be_purchased_as_general_admission(db: Session):
     client, event = create_event(db, "movie", capacity=200)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            reserve_general(
-                GeneralReservationCreate(
-                    event_id=event.id,
-                    quantity=1,
-                    payment="approve",
-                ),
-                client,
-                db,
-            )
-        )
+        create_free_checkout(db, client, event, quantity=1)
 
     assert exc_info.value.status_code == 400

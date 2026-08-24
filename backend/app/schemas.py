@@ -9,14 +9,29 @@ MAX_CHECKOUT_TICKETS = 20
 EventImageUrl = Annotated[AnyHttpUrl, UrlConstraints(max_length=500)]
 
 class UserCreate(BaseModel):
-    name: str
-    email: str
-    password: str = Field(min_length=6)
-    role: str = "client"
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=6, max_length=72)
+    role: Literal["client", "organizer", "gate"] = "client"
+
+    @field_validator("name", "email")
+    @classmethod
+    def normalize_user_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("não pode ficar em branco")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def enforce_bcrypt_byte_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("deve ter no máximo 72 bytes")
+        return value
 
 class LoginIn(BaseModel):
-    email: str
-    password: str
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=1, max_length=72)
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -101,26 +116,6 @@ class SeatOut(BaseModel):
     number: int
     status: str
 
-class ReservationCreate(BaseModel):
-    seat_id: int
-    payment: str = Field(pattern="^(approve|decline)$")
-
-class ReservationBatchCreate(BaseModel):
-    seat_ids: list[int] = Field(min_length=1, max_length=1000)
-    payment: str = Field(pattern="^(approve|decline)$")
-
-    @field_validator("seat_ids")
-    @classmethod
-    def require_distinct_seats(cls, value: list[int]) -> list[int]:
-        if len(value) != len(set(value)):
-            raise ValueError("não pode conter assentos repetidos")
-        return value
-
-class GeneralReservationCreate(BaseModel):
-    event_id: int
-    quantity: int = Field(ge=1, le=1000)
-    payment: str = Field(pattern="^(approve|decline)$")
-
 class ReservationOut(BaseModel):
     id: int
     status: str
@@ -172,8 +167,8 @@ class CheckoutSyncIn(BaseModel):
     session_id: str = Field(min_length=1, max_length=255)
 
 class GateValidationIn(BaseModel):
-    code: str
-    event_id: int
+    code: str = Field(min_length=1, max_length=4096)
+    event_id: int = Field(gt=0)
 
 class GateValidationOut(BaseModel):
     result: str

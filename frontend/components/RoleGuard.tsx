@@ -18,6 +18,8 @@ export default function RoleGuard({
   const allowedRolesKey = allowedRoles.join(",");
 
   useEffect(() => {
+    const allowedRoleSet = new Set(allowedRolesKey.split(","));
+
     function checkAccess() {
       const user = getUser();
       const token = getToken();
@@ -28,7 +30,7 @@ export default function RoleGuard({
         return;
       }
 
-      if (!allowedRoles.includes(user.role)) {
+      if (!allowedRoleSet.has(user.role)) {
         setAuthorized(false);
         router.replace("/events");
         return;

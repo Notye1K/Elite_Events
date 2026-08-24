@@ -13,7 +13,7 @@ Este projeto foi produzido com apoio de IA, em vez de esconder esse fato. O obje
 
 ## Decisões que precisam permanecer explicitamente humanas
 
-- escolher mapa de assentos em vez de pista;
+- escolher mapa de assentos para filmes e estoque geral sem assentos para shows;
 - escolher PostgreSQL e uma linha `Seat` como fonte de verdade do estoque;
 - tratar pagamento recusado como operação que libera estoque imediatamente;
 - usar JWT assinado com `jti` + hash persistido para o QR;
@@ -34,4 +34,4 @@ Ao trabalhar no desafio, faça commits pequenos e descritivos, por exemplo:
 - `test: cover ticket integrity rules`
 - `docs: explain architecture and ai usage`
 
-O histórico é parte da narrativa do projeto, porque o desafio explicitamente pede commits ao longo da semana. fileciteturn0file0L87-L102
+O histórico é parte da narrativa do projeto, porque o desafio explicitamente pede commits ao longo da semana. O [`AGENTS.md`](../AGENTS.md) foi mantido no repositório como um dos artefatos de contexto usados no desenvolvimento.

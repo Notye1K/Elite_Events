@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -7,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from .config import settings
-from .db import get_db, initialize_database
+from .db import SessionLocal, get_db, initialize_database
 from .deps import current_user, role_required
 from .checkout_service import (
     available_count,
@@ -25,7 +26,13 @@ from .services import build_ticket, catalog_search, create_event_seats
 
 logger = logging.getLogger("uvicorn.error")
 
-app = FastAPI(title=settings.app_name, version="1.0.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize_database()
+    yield
+
+
+app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
@@ -60,20 +67,15 @@ def event_data(payload: EventCreate):
     data["image_url"] = str(payload.image_url) if payload.image_url else None
     return data
 
-@app.on_event("startup")
-def startup():
-    initialize_database()
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 @app.post("/auth/register", response_model=TokenOut)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
-    role = payload.role if payload.role in {"client", "organizer", "gate"} else "client"
     if db.scalar(select(User).where(User.email == payload.email.lower())):
         raise HTTPException(409, "Email already registered")
-    user = User(name=payload.name, email=payload.email.lower(), password_hash=hash_password(payload.password), role=role)
+    user = User(name=payload.name, email=payload.email.lower(), password_hash=hash_password(payload.password), role=payload.role)
     db.add(user); db.commit(); db.refresh(user)
     return TokenOut(access_token=create_access_token(user.id, user.role), user=user)
 
@@ -94,14 +96,18 @@ def list_events(q: str | None = Query(default=None), db: Session = Depends(get_d
 
 @app.get("/events/{event_id}", response_model=EventOut)
 def get_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
+    event = db.scalar(
+        select(Event).where(Event.id == event_id, Event.published.is_(True))
+    )
     if not event:
         raise HTTPException(404, "Event not found")
     return event
 
 @app.get("/events/{event_id}/seats", response_model=list[SeatOut])
 def get_seats(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
+    event = db.scalar(
+        select(Event).where(Event.id == event_id, Event.published.is_(True))
+    )
     if not event:
         raise HTTPException(404, "Event not found")
     if event.event_type == "show":
@@ -112,7 +118,9 @@ def get_seats(event_id: int, db: Session = Depends(get_db)):
 
 @app.get("/events/{event_id}/availability", response_model=EventAvailabilityOut)
 def get_event_availability(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
+    event = db.scalar(
+        select(Event).where(Event.id == event_id, Event.published.is_(True))
+    )
     if not event:
         raise HTTPException(404, "Event not found")
     if release_expired_checkouts(db, event_id=event.id):
@@ -129,16 +137,6 @@ def create_event(payload: EventCreate, user: User = Depends(role_required("organ
 @app.get("/organizer/events", response_model=list[EventOut])
 def organizer_events(user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
     return list(db.scalars(select(Event).where(Event.organizer_id == user.id).order_by(Event.starts_at)).all())
-
-@app.patch("/organizer/events/{event_id}", response_model=EventOut)
-def update_event(event_id: int, payload: EventCreate, user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
-    if not event or event.organizer_id != user.id:
-        raise HTTPException(404, "Event not found")
-    for k, v in event_data(payload).items():
-        setattr(event, k, v)
-    db.commit(); db.refresh(event)
-    return event
 
 @app.delete("/organizer/events/{event_id}")
 def delete_event(event_id: int, user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
@@ -589,151 +587,6 @@ async def stripe_webhook(
 def reservation_to_out(reservation: Reservation, ticket_id: int | None = None):
     return ReservationOut(id=reservation.id, status=reservation.status, payment_status=reservation.payment_status, ticket_id=ticket_id)
 
-def simulated_payments_required():
-    if not settings.enable_simulated_payments:
-        raise HTTPException(
-            410,
-            "A simulação interna foi desativada. Use o Checkout da Stripe.",
-        )
-
-async def reserve_seats(
-    seat_ids: list[int],
-    payment: str,
-    user: User,
-    db: Session,
-    *,
-    general_admission: bool = False,
-) -> list[ReservationOut]:
-    ordered_seat_ids = sorted(seat_ids)
-    seats = list(
-        db.scalars(
-            select(Seat)
-            .where(Seat.id.in_(ordered_seat_ids))
-            .order_by(Seat.id)
-            .with_for_update()
-        ).all()
-    )
-    if len(seats) != len(ordered_seat_ids) or any(
-        seat.status != "available" for seat in seats
-    ):
-        raise HTTPException(409, "Um ou mais assentos não estão mais disponíveis.")
-
-    event_ids = {seat.event_id for seat in seats}
-    if len(event_ids) != 1:
-        raise HTTPException(400, "Todos os assentos devem pertencer ao mesmo evento.")
-
-    event = db.get(Event, seats[0].event_id)
-    if not event or not event.published:
-        raise HTTPException(404, "Evento não encontrado.")
-    if event.event_type == "show" and not general_admission:
-        raise HTTPException(400, "Shows devem ser reservados pela quantidade de ingressos.")
-    if event.event_type != "show" and general_admission:
-        raise HTTPException(400, "Este evento utiliza seleção de assentos.")
-    if is_event_from_previous_day(event.starts_at):
-        raise HTTPException(
-            409,
-            "Não é possível reservar ingressos para eventos de dias anteriores.",
-        )
-
-    reservations_with_tickets: list[tuple[Reservation, Ticket | None]] = []
-    for seat in seats:
-        reservation = Reservation(
-            event_id=event.id,
-            seat_id=seat.id,
-            user_id=user.id,
-            status="pending",
-            payment_status="pending",
-        )
-        db.add(reservation)
-        seat.status = "reserved"
-        db.flush()
-
-        if payment == "decline":
-            reservation.status = "cancelled"
-            reservation.payment_status = "declined"
-            seat.status = "available"
-            ticket = None
-        else:
-            reservation.status = "confirmed"
-            reservation.payment_status = "paid"
-            ticket, _ = build_ticket(db, reservation, event, user.id)
-
-        reservations_with_tickets.append((reservation, ticket))
-
-    db.commit()
-    results = []
-    for reservation, ticket in reservations_with_tickets:
-        db.refresh(reservation)
-        if ticket:
-            db.refresh(ticket)
-        results.append(
-            reservation_to_out(reservation, ticket.id if ticket else None)
-        )
-
-    available_count = db.scalar(
-        select(func.count(Seat.id)).where(
-            Seat.event_id == event.id,
-            Seat.status == "available",
-        )
-    ) or 0
-    for seat in seats:
-        await manager.broadcast(
-            event.id,
-            {
-                "type": "seat_updated",
-                "seat_id": seat.id,
-                "status": seat.status,
-                "available_count": available_count,
-            },
-        )
-
-    return results
-
-@app.post("/reservations", response_model=ReservationOut, deprecated=True)
-async def reserve(payload: ReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db), _=Depends(simulated_payments_required)):
-    results = await reserve_seats([payload.seat_id], payload.payment, user, db)
-    return results[0]
-
-@app.post("/reservations/batch", response_model=list[ReservationOut], deprecated=True)
-async def reserve_batch(payload: ReservationBatchCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db), _=Depends(simulated_payments_required)):
-    return await reserve_seats(payload.seat_ids, payload.payment, user, db)
-
-@app.post("/reservations/general", response_model=list[ReservationOut], deprecated=True)
-async def reserve_general(payload: GeneralReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db), _=Depends(simulated_payments_required)):
-    event = db.get(Event, payload.event_id)
-    if not event or not event.published:
-        raise HTTPException(404, "Evento não encontrado.")
-    if event.event_type != "show":
-        raise HTTPException(400, "Este evento utiliza seleção de assentos.")
-    if is_event_from_previous_day(event.starts_at):
-        raise HTTPException(
-            409,
-            "Não é possível reservar ingressos para eventos de dias anteriores.",
-        )
-
-    inventory = list(
-        db.scalars(
-            select(Seat)
-            .where(
-                Seat.event_id == event.id,
-                Seat.status == "available",
-            )
-            .order_by(Seat.id)
-            .limit(payload.quantity)
-            .with_for_update(skip_locked=True)
-        ).all()
-    )
-    if len(inventory) != payload.quantity:
-        raise HTTPException(409, "Não há ingressos suficientes disponíveis.")
-
-    return await reserve_seats(
-        [seat.id for seat in inventory],
-        payload.payment,
-        user,
-        db,
-        general_admission=True,
-    )
-
 @app.post("/reservations/{reservation_id}/cancel", response_model=ReservationOut)
 async def cancel_reservation(reservation_id: int, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
     reservation = db.get(Reservation, reservation_id)
@@ -862,7 +715,11 @@ def validate_ticket(payload: GateValidationIn, user: User = Depends(role_require
         decoded = decode_ticket_token(payload.code)
     except Exception:
         return GateValidationOut(result="invalid", message="Código inválido ou adulterado")
-    ticket = db.get(Ticket, int(decoded.get("ticket_id", 0)))
+    ticket = db.scalar(
+        select(Ticket)
+        .where(Ticket.id == int(decoded.get("ticket_id", 0)))
+        .with_for_update()
+    )
     if not ticket or ticket.code_jti != decoded.get("jti") or token_hash(payload.code) != ticket.token_hash:
         return GateValidationOut(result="invalid", message="Ingresso não encontrado")
     if ticket.event_id != payload.event_id:
@@ -890,6 +747,17 @@ def me(user: User = Depends(current_user)):
 
 @app.websocket("/ws/events/{event_id}/seats")
 async def seat_socket(websocket: WebSocket, event_id: int):
+    with SessionLocal() as db:
+        published_event = db.scalar(
+            select(Event.id).where(
+                Event.id == event_id,
+                Event.published.is_(True),
+            )
+        )
+    if published_event is None:
+        await websocket.close(code=1008, reason="Evento não encontrado")
+        return
+
     await manager.connect(event_id, websocket)
     try:
         while True:

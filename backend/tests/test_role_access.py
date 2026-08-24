@@ -7,15 +7,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
-from app.config import settings
 from app.deps import current_user
 from app.main import app
 from app.models import Event, Seat, User
 
 
 @pytest.fixture
-def access_context(monkeypatch):
-    monkeypatch.setattr(settings, "enable_simulated_payments", True)
+def access_context():
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -43,7 +41,7 @@ def access_context(monkeypatch):
             starts_at=datetime.now(timezone.utc) + timedelta(days=2),
             location="Local",
             capacity=1,
-            price_cents=1000,
+            price_cents=0,
             published=True,
             organizer_id=users["organizer"].id,
         )
@@ -128,20 +126,20 @@ def test_private_endpoints_allow_only_their_role(
 
 
 def test_only_client_can_purchase_tickets(access_context):
-    api_client, users, _, seat = access_context
-    payload = {"seat_ids": [seat.id], "payment": "decline"}
+    api_client, users, event, seat = access_context
+    payload = {"event_id": event.id, "seat_ids": [seat.id]}
 
     authenticate_as(None)
-    assert api_client.post("/reservations/batch", json=payload).status_code == 401
+    assert api_client.post("/checkout/sessions", json=payload).status_code == 401
 
     for role in ("organizer", "gate"):
         authenticate_as(users[role])
-        assert api_client.post("/reservations/batch", json=payload).status_code == 403
+        assert api_client.post("/checkout/sessions", json=payload).status_code == 403
 
     authenticate_as(users["client"])
-    response = api_client.post("/reservations/batch", json=payload)
+    response = api_client.post("/checkout/sessions", json=payload)
     assert response.status_code == 200
-    assert response.json()[0]["status"] == "cancelled"
+    assert response.json()["status"] == "paid"
 
 
 def test_only_client_role_can_request_ticket_cancellation(access_context):
@@ -160,14 +158,24 @@ def test_only_client_role_can_request_ticket_cancellation(access_context):
 
 def test_only_client_can_purchase_general_admission(access_context):
     api_client, users, _, _ = access_context
-    payload = {"event_id": 999, "quantity": 1, "payment": "approve"}
+    payload = {"event_id": 999, "quantity": 1}
 
     authenticate_as(None)
-    assert api_client.post("/reservations/general", json=payload).status_code == 401
+    assert api_client.post("/checkout/sessions", json=payload).status_code == 401
 
     for role in ("organizer", "gate"):
         authenticate_as(users[role])
-        assert api_client.post("/reservations/general", json=payload).status_code == 403
+        assert api_client.post("/checkout/sessions", json=payload).status_code == 403
 
     authenticate_as(users["client"])
-    assert api_client.post("/reservations/general", json=payload).status_code == 404
+    assert api_client.post("/checkout/sessions", json=payload).status_code == 404
+
+
+def test_unpublished_events_are_not_exposed_by_public_endpoints(access_context):
+    api_client, users, event, _ = access_context
+    event.published = False
+    api_client.app.dependency_overrides[current_user] = lambda: users["organizer"]
+
+    assert api_client.get(f"/events/{event.id}").status_code == 404
+    assert api_client.get(f"/events/{event.id}/seats").status_code == 404
+    assert api_client.get(f"/events/{event.id}/availability").status_code == 404

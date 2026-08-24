@@ -2,6 +2,26 @@ from app.config import settings
 from app.services import catalog_search
 
 
+class TMDbResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "results": [
+                {
+                    "id": 550,
+                    "title": "Clube da Luta",
+                    "original_title": "Fight Club",
+                    "overview": "Um homem conhece Tyler Durden.",
+                    "release_date": "1999-10-15",
+                    "poster_path": "/poster.jpg",
+                    "vote_average": 8.4,
+                }
+            ]
+        }
+
+
 class TicketmasterResponse:
     def raise_for_status(self):
         return None
@@ -38,6 +58,34 @@ class TicketmasterResponse:
                 ]
             }
         }
+
+
+def test_tmdb_catalog_maps_movie_overview_and_image(monkeypatch):
+    captured = {}
+
+    def fake_get(url, *, headers, params, timeout):
+        captured.update(
+            {"url": url, "headers": headers, "params": params, "timeout": timeout}
+        )
+        return TMDbResponse()
+
+    monkeypatch.setattr(settings, "tmdb_api_key", "test-token")
+    monkeypatch.setattr("app.services.httpx.get", fake_get)
+
+    result = catalog_search("tmdb", "Clube da Luta")
+
+    assert result["configured"] is True
+    assert captured["headers"]["Authorization"] == "Bearer test-token"
+    assert captured["params"]["language"] == "pt-BR"
+    assert result["items"][0] == {
+        "id": "550",
+        "title": "Clube da Luta",
+        "original_title": "Fight Club",
+        "overview": "Um homem conhece Tyler Durden.",
+        "date": "1999-10-15",
+        "image": "https://image.tmdb.org/t/p/w500/poster.jpg",
+        "vote_average": 8.4,
+    }
 
 
 def test_ticketmaster_catalog_maps_show_data(monkeypatch):

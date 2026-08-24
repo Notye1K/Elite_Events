@@ -2,7 +2,9 @@
 
 Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no frontend, **FastAPI + Python** no backend e **PostgreSQL** como banco. O fluxo foi desenhado para passar pelo cenário completo: catálogo externo → publicação → busca → escolha de assento ou quantidade → Checkout Stripe em sandbox → ingresso com QR → compartilhamento → validação de portaria.
 
-> O desafio pede um fluxo ponta a ponta simples e completo, documentação clara e dados semeados. Os opcionais também foram implementados: busca/filtro, painel do organizador, cancelamento com devolução ao estoque, mapa de assentos em atualização em tempo real, Docker Compose, testes e preparação para deploy. fileciteturn0file0L67-L85
+> O desafio pede um fluxo ponta a ponta simples e completo, documentação clara e dados semeados. Os opcionais também foram implementados: busca/filtro, painel do organizador, cancelamento com devolução ao estoque, mapa de assentos em atualização em tempo real, Docker Compose, testes e preparação para deploy.
+
+**Demonstração publicada:** [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/)
 
 ## Stack
 
@@ -149,6 +151,8 @@ A API é a autoridade de segurança e valida o token e a role em todos os endpoi
 
 Visitantes que tentarem abrir uma página privada são enviados ao login. Usuários autenticados com uma role diferente são enviados à página pública de eventos.
 
+O cadastro permite escolher livremente entre cliente, organizador e portaria. Isso foi mantido de propósito para que qualquer avaliador consiga criar e testar todos os tipos de usuário sem depender de uma conta administrativa. Em produção, organizadores e profissionais de portaria normalmente seriam convidados ou aprovados por um administrador.
+
 ## Cancelamento de ingressos
 
 Na página **Meus ingressos**, o cliente pode cancelar um ingresso próprio enquanto ele estiver com status `valid`. O cancelamento usa `POST /tickets/{ticket_id}/cancel` e executa na mesma transação:
@@ -180,7 +184,7 @@ Filmes usam capacidade fixa de 200 cadeiras em 10 fileiras de 20. O mapa torna a
 
 Shows não expõem assentos: a tela mostra um contador de ingressos disponíveis e uma seleção de quantidade. Internamente, cada ingresso geral ainda é uma unidade de estoque bloqueável, permitindo reutilizar as garantias de concorrência, cancelamento, exclusão e WebSocket sem criar uma segunda arquitetura de reservas.
 
-Filmes e shows iniciam a compra por `POST /checkout/sessions`. Os antigos endpoints `POST /reservations/batch` e `POST /reservations/general` foram mantidos apenas como compatibilidade de testes, marcados como legados e desativados por padrão por `ENABLE_SIMULATED_PAYMENTS=false`.
+Filmes e shows iniciam a compra exclusivamente por `POST /checkout/sessions`, usando o mesmo fluxo de reserva temporária e confirmação de pagamento.
 
 ### 2. Concorrência no estoque
 
@@ -227,10 +231,17 @@ Em uma aplicação de produção, essa regra poderia ser retomada como uma janel
 ## Segurança e limites conscientemente assumidos
 
 - JWT de sessão tem expiração e deve usar segredos fortes em produção.
+- O cadastro aberto de organizador e portaria é uma decisão consciente para facilitar a avaliação de todas as roles; em produção esses papéis exigiriam convite ou aprovação administrativa.
 - O QR é assinado, mas o compartilhamento de um ingresso continua sendo compartilhamento de posse; a autenticação de cliente não é usada para bloquear o link público.
 - Não há recuperação de senha, e-mail, nota fiscal, revenda ou app nativo porque o próprio desafio exclui esses itens do escopo.
 - A Stripe está integrada em sandbox para a demonstração. Com `STRIPE_TEST_MODE=true`, o backend recusa chaves que não comecem com `sk_test_` ou `rk_test_`, evitando cobranças acidentais. Passar para produção exige alterar conscientemente essa opção, usar chaves de produção, HTTPS, revisar os meios de pagamento e configurar outro webhook; este projeto não ativa cobranças reais por padrão.
 - O seed é voltado para avaliação local e deve ser removido/adaptado em produção.
+
+### Decisões de escopo do organizador
+
+A interface do organizador não possui edição de eventos de propósito. Uma edição segura teria de bloquear mudanças relevantes depois da emissão de ingressos; como o formulário tem poucos campos e a maioria é preenchida automaticamente ao selecionar um filme ou show, preferi não adicionar essa feature ao desafio.
+
+Também considerei um sistema de cancelamento do evento que notificaria os clientes com ingressos emitidos. A ideia surgiu no último dia, e preferi não introduzir um fluxo novo perto da entrega sem saber se alterações adicionais seriam permitidas depois do prazo e antes da avaliação. A exclusão existente continua deliberadamente limitada pelas regras documentadas acima.
 
 ## Testes
 
@@ -247,11 +258,23 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e adulteração, limites dos eventos, adaptador Ticketmaster, mapa de 200 cadeiras, estoque geral de shows, compras atômicas, esgotamento, cancelamento, RBAC, datas, portaria, exclusão de eventos e o Checkout Stripe: bloqueio temporário, aprovação, falha, cancelamento, propriedade e idempotência do webhook.
+Os testes cobrem token assinado e adulteração, limites dos eventos, adaptadores TMDb e Ticketmaster, mapa de 200 cadeiras, estoque geral de shows, compras atômicas, concorrência real no PostgreSQL, esgotamento, cancelamento, RBAC, datas, portaria, exclusão de eventos e o Checkout Stripe: bloqueio temporário, aprovação, falha, cancelamento, propriedade e idempotência do webhook.
+
+## CI/CD
+
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em pushes e pull requests para `main`. Ele executa:
+
+- `npm ci`, lint e build de produção do frontend;
+- testes do backend com Python 3.12 e PostgreSQL 17, incluindo o cenário concorrente de validação na portaria;
+- validação da combinação dos arquivos Docker Compose.
+
+O CD não é duplicado no GitHub Actions: Vercel e Render já observam o repositório e publicam automaticamente depois de um push na branch conectada (`autoDeploy: true` no `render.yaml`). O fluxo recomendado é **pull request → CI aprovado → merge em `main` → deploy automático nas plataformas**. Para impedir que uma falha chegue a produção, a branch `main` deve ser protegida exigindo o sucesso do CI antes do merge; um push direto em `main` pode iniciar o deploy externo antes de o workflow terminar.
 
 ## Deploy
 
 ### Frontend — Vercel
+
+URL publicada: [https://frontend-iota-ashy-55.vercel.app/](https://frontend-iota-ashy-55.vercel.app/)
 
 1. Importe o diretório `frontend`.
 2. Defina `NEXT_PUBLIC_API_URL` para a URL pública da API.
@@ -269,17 +292,16 @@ A aplicação foi organizada para separação de responsabilidades entre fronten
 
 ## Histórico e uso de IA
 
-Consulte [`docs/AI_USAGE.md`](docs/AI_USAGE.md) para registrar o que foi acelerado por IA e quais decisões devem ser atribuídas à análise humana.
+Consulte [`docs/AI_USAGE.md`](docs/AI_USAGE.md) para registrar o que foi acelerado por IA e quais decisões devem ser atribuídas à análise humana. O arquivo [`AGENTS.md`](AGENTS.md) também foi incluído como artefato de contexto usado durante o desenvolvimento assistido.
 
 ## Próximos passos que eu faria em produção
 
 - migrar `create_all` para Alembic;
 - adicionar rate limiting no login e na portaria;
 - auditar ações de portaria;
-- tornar chaves e secrets obrigatórios fora do ambiente local;
-- criar testes de integração concorrente no Postgres real;
+- adicionar gerenciamento administrativo e convites para roles privilegiadas;
 - adicionar observabilidade e logs estruturados;
-- adicionar pipeline CI para lint, testes e build.
+- implementar edição e cancelamento de eventos com regras de imutabilidade, reembolso e notificação dos clientes.
 
 ## Deploy gratuito recomendado (produção de avaliação)
 
@@ -332,7 +354,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_CURRENCY=brl
 STRIPE_CHECKOUT_EXPIRATION_MINUTES=30
 STRIPE_TEST_MODE=true
-ENABLE_SIMULATED_PAYMENTS=false
+APP_ENV=production
 APP_TIMEZONE=America/Sao_Paulo
 ```
 

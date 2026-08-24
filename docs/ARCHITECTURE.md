@@ -12,7 +12,7 @@ Next.js
 FastAPI
   ├─ Auth / RBAC
   ├─ Eventos / Seats
-  ├─ Reservas / Cancelamento
+  ├─ Checkout Stripe / Reservas / Cancelamento
   ├─ Tickets / Share
   ├─ Gate validation
   └─ External catalog adapters
@@ -42,7 +42,7 @@ PostgreSQL
 7. Cancelar reserva devolve a unidade de estoque para `available` e invalida o ticket.
 8. Ticket só é criado depois que a Stripe confirma `payment_status=paid`; webhooks repetidos são idempotentes.
 9. Checkouts pendentes, cancelados ou expirados não geram tickets e liberam o estoque.
-8. Filmes têm 200 cadeiras em fileiras de 20; shows exigem capacidade e não permitem escolha de assento.
+10. Filmes têm 200 cadeiras em fileiras de 20; shows exigem capacidade e não permitem escolha de assento.
 
 ## Deployment topology
 

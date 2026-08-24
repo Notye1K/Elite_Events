@@ -9,9 +9,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base
 from app.event_time import APP_TIMEZONE, is_event_from_previous_day
-from app.main import reserve_batch, validate_ticket
+from app.main import create_checkout_session, validate_ticket
 from app.models import Event, Reservation, Seat, Ticket, User
-from app.schemas import GateValidationIn, ReservationBatchCreate
+from app.schemas import CheckoutCreate, GateValidationIn
 from app.services import build_ticket
 
 
@@ -69,7 +69,7 @@ def create_event_context(
         starts_at=starts_at,
         location="Local",
         capacity=1,
-        price_cents=1000,
+        price_cents=0,
         published=True,
         organizer_id=organizer.id,
     )
@@ -111,10 +111,11 @@ def create_ticket(
 
 def reserve_one(db: Session, client: User, seat: Seat):
     return asyncio.run(
-        reserve_batch(
-            ReservationBatchCreate(seat_ids=[seat.id], payment="approve"),
+        create_checkout_session(
+            CheckoutCreate(event_id=seat.event_id, seat_ids=[seat.id]),
             client,
             db,
+            None,
         )
     )
 
@@ -146,8 +147,8 @@ def test_client_can_reserve_event_from_current_day(db: Session):
 
     result = reserve_one(db, client, seat)
 
-    assert result[0].status == "confirmed"
-    assert result[0].ticket_id is not None
+    assert result.status == "paid"
+    assert len(result.ticket_ids) == 1
     assert db.get(Seat, seat.id).status == "reserved"
 
 
