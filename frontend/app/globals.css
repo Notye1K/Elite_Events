@@ -341,17 +341,20 @@ label {
   object-fit: contain;
 }
 .organizer-event-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, 340px);
+  justify-content: center;
+  align-items: stretch;
 }
 .organizer-event-card {
+  width: 340px;
   height: 600px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .organizer-event-media {
-  min-height: 0;
-  flex: 1 1 auto;
+  height: 360px;
+  flex: 0 0 360px;
   display: grid;
   place-items: center;
   margin-bottom: 18px;
@@ -844,5 +847,13 @@ label {
   }
   .ticket {
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 420px) {
+  .organizer-event-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .organizer-event-card {
+    width: 100%;
   }
 }
