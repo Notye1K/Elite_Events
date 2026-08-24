@@ -3,7 +3,7 @@
 ```text
 Next.js
   ├─ /events                descoberta + filtros
-  ├─ /events/[id]           mapa de assentos + checkout simulado
+  ├─ /events/[id]           mapa de filme ou contador de show + checkout
   ├─ /tickets               QR + compartilhamento
   ├─ /organizer             catálogo + publicação
   └─ /gate                  câmera/manual + validação
@@ -25,7 +25,7 @@ PostgreSQL
 
 - `users`: identidade + papel.
 - `events`: publicação e metadados editoriais.
-- `seats`: inventário de lugares.
+- `seats`: inventário de cadeiras de filme ou unidades gerais de show; unidades de show não são expostas como assentos.
 - `reservations`: intenção/estado de compra.
 - `tickets`: ingresso final, estado de uso e material criptográfico associado.
 
@@ -37,7 +37,8 @@ PostgreSQL
 4. Ticket usado não pode ser usado de novo.
 5. Ticket de outro evento nunca é aceito na portaria.
 6. Token com assinatura inválida ou hash incompatível não é aceito.
-7. Cancelar reserva devolve o assento para `available` e invalida o ticket.
+7. Cancelar reserva devolve a unidade de estoque para `available` e invalida o ticket.
+8. Filmes têm 200 cadeiras em fileiras de 20; shows exigem capacidade e não permitem escolha de assento.
 
 ## Deployment topology
 

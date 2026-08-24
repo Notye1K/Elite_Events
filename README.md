@@ -1,6 +1,6 @@
 # Elite Dev — Plataforma de Eventos e Ingressos
 
-Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no frontend, **FastAPI + Python** no backend e **PostgreSQL** como banco. O fluxo foi desenhado para passar pelo cenário completo: catálogo externo → publicação → busca → escolha de assento → pagamento simulado → ingresso com QR → compartilhamento → validação de portaria.
+Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no frontend, **FastAPI + Python** no backend e **PostgreSQL** como banco. O fluxo foi desenhado para passar pelo cenário completo: catálogo externo → publicação → busca → escolha de assento ou quantidade → pagamento simulado → ingresso com QR → compartilhamento → validação de portaria.
 
 > O desafio pede um fluxo ponta a ponta simples e completo, documentação clara e dados semeados. Os opcionais também foram implementados: busca/filtro, painel do organizador, cancelamento com devolução ao estoque, mapa de assentos em atualização em tempo real, Docker Compose, testes e preparação para deploy. fileciteturn0file0L67-L85
 
@@ -9,7 +9,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 - **Frontend:** Next.js 16, React 19, TypeScript, CSS próprio.
 - **Backend:** FastAPI, SQLAlchemy, PyJWT.
 - **Banco:** PostgreSQL 17.
-- **Integração externa:** TMDb (chave opcional).
+- **Integrações externas:** TMDb para filmes e Ticketmaster Discovery API para shows (chaves opcionais).
 - **QR:** `qrcode.react` no cliente e token JWT assinado no backend.
 - **Leitura:** `html5-qrcode`, com digitação manual como fallback.
 - **Infra:** Docker Compose.
@@ -18,7 +18,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 ## Como rodar com Docker
 
 1. Copie `.env.example` para `.env`.
-2. Opcionalmente preencha `TMDB_API_KEY` para habilitar o catálogo externo de filmes.
+2. Opcionalmente preencha `TMDB_API_KEY` para filmes e `TICKETMASTER_API_KEY` para shows.
 3. Rode:
 
 ```bash
@@ -50,7 +50,7 @@ Todos usam senha `123456`:
 | Cliente 2 | `cliente2@elite.dev` |
 | Portaria | `portaria@elite.dev` |
 
-O seed cria o evento publicado **Noite de Cinema Elite** com 40 lugares.
+Em um banco novo, o seed cria o evento publicado **Noite de Cinema Elite** com 200 lugares, distribuídos em fileiras de 20.
 
 ## Fluxo de demonstração
 
@@ -58,8 +58,8 @@ O seed cria o evento publicado **Noite de Cinema Elite** com 40 lugares.
 
 1. Entre com `cliente1@elite.dev`.
 2. Acesse **Eventos**.
-3. Abra o evento semeado e escolha um ou mais assentos. Cada clique alterna o lugar entre selecionado e desmarcado.
-4. Clique em **Pagar simulado** para aprovar o grupo ou **Simular recusa** para testar a devolução imediata de todos os lugares ao estoque.
+3. Em um filme, escolha um ou mais assentos; em um show, escolha a quantidade no estoque geral.
+4. Clique em **Pagar simulado**. No mapa de filme, **Cancelar** limpa todas as seleções ainda não enviadas.
 5. Abra **Meus ingressos** para ver o QR, copiar o código usado na portaria ou abrir o link compartilhável.
 6. Abra o link em outra aba ou dispositivo para testar a visualização pública do ingresso.
 7. Em **Meus ingressos**, cancele um ingresso válido para demonstrar a devolução do assento ao estoque.
@@ -77,12 +77,13 @@ O seed cria o evento publicado **Noite de Cinema Elite** com 40 lugares.
 
 ## Catálogo externo
 
-O projeto usa o **TMDb** como catálogo externo de filmes. O endpoint `GET /external/catalog` recebe `source=tmdb` e `q=<texto>`.
+O projeto usa o **TMDb** como catálogo externo de filmes e a [Ticketmaster Discovery API v2](https://developer.ticketmaster.com/products-and-docs/apis/discovery-manual/v2/) como catálogo de shows. O endpoint `GET /external/catalog` recebe `source=tmdb|ticketmaster` e `q=<texto>`. A busca da Ticketmaster filtra a classificação `music` e usa a Consumer Key no parâmetro `apikey`, somente no backend.
 
 Exemplo:
 
 ```bash
 curl 'http://localhost:8000/external/catalog?source=tmdb&q=batman'
+curl 'http://localhost:8000/external/catalog?source=ticketmaster&q=coldplay'
 ```
 
 Sem chave configurada, o endpoint retorna `configured=false`; o restante do sistema continua funcionando com o catálogo local/seed.
@@ -98,11 +99,12 @@ Os limites são validados no formulário e novamente pela API. Título, descriç
 | Imagem (URL) | Opcional; URL HTTP/HTTPS com até 500 caracteres |
 | Data/hora | No mínimo 24 horas de antecedência e no máximo 10 anos no futuro |
 | Local | 1 a 255 caracteres; não aceita somente espaços |
-| Capacidade | 1 a 1.000 lugares |
+| Tipo | `movie` (filme) ou `show` |
+| Capacidade | Filme: fixa em 200 cadeiras, 20 por fileira. Show: obrigatória, de 1 a 1.000 ingressos gerais |
 | Preço | 0 a 10.000.000 de centavos (até R$ 100.000,00) |
 | ID externo | Opcional; até 120 caracteres |
 
-A busca no catálogo do TMDb aceita consultas de até 200 caracteres.
+As buscas nos catálogos do TMDb e da Ticketmaster aceitam consultas de até 200 caracteres. Quando há ID externo, a API também garante que TMDb seja usado apenas em filmes e Ticketmaster apenas em shows.
 
 ## Autorização por role
 
@@ -110,8 +112,8 @@ A API é a autoridade de segurança e valida o token e a role em todos os endpoi
 
 | Área ou ação | Acesso |
 |---|---|
-| Lista, detalhes e assentos dos eventos | Público, inclusive sem login |
-| Selecionar assentos e comprar ingressos | Somente `client` |
+| Lista, detalhes, assentos e disponibilidade | Público, inclusive sem login |
+| Selecionar assentos ou quantidade e comprar ingressos | Somente `client` |
 | Meus ingressos | Somente `client` |
 | Painel e ações do organizador | Somente `organizer` |
 | Portaria e validação de ingresso | Somente `gate` |
@@ -126,7 +128,7 @@ Na página **Meus ingressos**, o cliente pode cancelar um ingresso próprio enqu
 - ingresso `valid → cancelled`;
 - reserva `confirmed → cancelled`;
 - pagamento `paid → refunded`;
-- assento `reserved → available`.
+- unidade de estoque `reserved → available` (cadeira no filme ou ingresso geral no show).
 
 Ingressos de outro cliente, já utilizados ou já cancelados não podem ser cancelados. O backend valida a propriedade e o estado do ingresso mesmo que o endpoint seja chamado diretamente.
 
@@ -144,17 +146,17 @@ O endpoint protegido é `DELETE /organizer/events/{event_id}`. Tentativas de exc
 
 ## Decisões técnicas importantes
 
-### 1. Mapa de assentos em vez de pista por quantidade
+### 1. Dois tipos de inventário
 
-Escolhi o mapa porque ele torna a regra de não vender o mesmo lugar duas vezes observável durante a avaliação. Também permite demonstrar o opcional de atualização em tempo real.
+Filmes usam capacidade fixa de 200 cadeiras em 10 fileiras de 20. O mapa torna a regra de não vender o mesmo lugar duas vezes observável durante a avaliação.
 
-Na tela de compra, os lugares usam numeração visual contínua e são distribuídos em até 40 colunas, centralizadas em relação à tela/palco. Em dispositivos menores, o mapa permite rolagem horizontal para preservar a legibilidade e a área de toque de cada assento.
+Shows não expõem assentos: a tela mostra um contador de ingressos disponíveis e uma seleção de quantidade. Internamente, cada ingresso geral ainda é uma unidade de estoque bloqueável, permitindo reutilizar as garantias de concorrência, cancelamento, exclusão e WebSocket sem criar uma segunda arquitetura de reservas.
 
-O cliente pode selecionar e desmarcar vários lugares antes do pagamento. A compra múltipla usa `POST /reservations/batch` e cria um ingresso individual para cada assento aprovado.
+Filmes usam `POST /reservations/batch`; shows usam `POST /reservations/general`. Os dois endpoints criam um ingresso individual para cada unidade aprovada.
 
 ### 2. Concorrência no estoque
 
-Cada lugar é uma linha `Seat`. Na reserva, o backend executa `SELECT ... FOR UPDATE` nos assentos, em ordem estável, e só muda `available → reserved` dentro da mesma transação. Em uma compra múltipla, todos os lugares são validados antes da primeira alteração: se um deles não estiver disponível, o lote inteiro é recusado. O estado físico dos lugares fica centralizado no banco, evitando venda dupla e compras parcialmente confirmadas.
+Cada cadeira ou ingresso geral é uma linha `Seat`. Na reserva, o backend executa `SELECT ... FOR UPDATE` em ordem estável e só muda `available → reserved` dentro da mesma transação. Shows usam `SKIP LOCKED` na escolha automática do estoque. Todas as unidades são validadas antes da primeira alteração: se não houver quantidade suficiente, o lote inteiro é recusado.
 
 ### 3. QR não forjável
 
@@ -164,7 +166,7 @@ O `iat` do JWT é derivado da data persistida de criação do ingresso. Assim, a
 
 ### 4. Pagamento simulado
 
-O desafio exige confirmação e recusa. Por isso o checkout usa dois caminhos explícitos: `approve` e `decline`. A recusa libera novamente o assento e não cria ingresso.
+O backend mantém os caminhos `approve` e `decline` exigidos pelo desafio. A recusa libera novamente o estoque e não cria ingresso. A interface principal usa aprovação; no filme, **Cancelar** apenas limpa a seleção local antes da compra.
 
 ### 5. Compartilhamento
 
@@ -172,7 +174,7 @@ O link público contém o mesmo token assinado do QR. Assim não existe um segun
 
 ### 6. Atualização em tempo real
 
-O mapa abre um WebSocket por evento. Depois de uma reserva ou cancelamento, o backend publica `seat_updated`; clientes conectados refletem o novo estado sem precisar recarregar a página.
+A tela de compra abre um WebSocket por evento. Depois de uma reserva ou cancelamento, o backend publica `seat_updated` com a disponibilidade atual; mapas de filmes e contadores de shows refletem o novo estoque sem recarregar a página.
 
 ### 7. Janela de validação na portaria
 
@@ -205,7 +207,7 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e detecção de adulteração, validações e limites dos eventos, reservas múltiplas atômicas com pagamento aprovado ou recusado, cancelamento de ingressos, matriz de acesso por role, bloqueio de reservas e validações para dias anteriores, permissão para o dia atual e datas futuras e regras de exclusão: evento próprio, evento de terceiros, evento passado com reserva e evento futuro com reserva ativa.
+Os testes cobrem token assinado e adulteração, limites dos eventos, adaptador Ticketmaster, mapa de 200 cadeiras, estoque geral de shows, compras atômicas, esgotamento, cancelamento, RBAC, datas e portaria para os dois tipos e exclusão de eventos próprios/de terceiros, passados e futuros com reserva.
 
 ## Deploy
 
@@ -292,6 +294,7 @@ Variáveis opcionais:
 
 ```text
 TMDB_API_KEY=...
+TICKETMASTER_API_KEY=...
 ```
 
 O Dockerfile do backend respeita automaticamente a variável `$PORT` fornecida pelo Render.

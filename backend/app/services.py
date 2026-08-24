@@ -8,10 +8,20 @@ from .security import create_ticket_token, token_hash
 
 
 def create_event_seats(db: Session, event: Event):
-    # Seat map optional implemented as 10 seats across 10 rows when using seated events.
-    if event.event_type != "seated":
+    if event.event_type == "show":
+        for number in range(1, event.capacity + 1):
+            db.add(
+                Seat(
+                    event_id=event.id,
+                    label=f"GERAL-{number}",
+                    row="GERAL",
+                    number=number,
+                )
+            )
         return
-    seats_per_row = 10
+
+    # Filmes têm capacidade fixa de 200 lugares, distribuídos em fileiras de 20.
+    seats_per_row = 20
     rows = max(1, (event.capacity + seats_per_row - 1) // seats_per_row)
     created = 0
     for row_index in range(rows):
@@ -63,14 +73,16 @@ def catalog_search(source: str, query: str):
             "region": "BR",
         }
 
-        response = httpx.get(
-            url,
-            headers=headers,
-            params=params,
-            timeout=10,
-        )
-
-        response.raise_for_status()
+        try:
+            response = httpx.get(
+                url,
+                headers=headers,
+                params=params,
+                timeout=10,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError("TMDb request failed") from exc
 
         data = response.json()
 
@@ -94,4 +106,68 @@ def catalog_search(source: str, query: str):
                 for movie in data.get("results", [])[:12]
             ],
         }
+    if source == "ticketmaster":
+        if not settings.ticketmaster_api_key:
+            return {
+                "source": source,
+                "configured": False,
+                "items": [],
+            }
+
+        try:
+            response = httpx.get(
+                "https://app.ticketmaster.com/discovery/v2/events.json",
+                params={
+                    "apikey": settings.ticketmaster_api_key,
+                    "keyword": query,
+                    "classificationName": "music",
+                    "locale": "*",
+                    "size": 12,
+                },
+                timeout=10,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            # Não propaga a URL da exceção porque ela contém a API key.
+            raise RuntimeError("Ticketmaster request failed") from exc
+
+        events = response.json().get("_embedded", {}).get("events", [])
+        items = []
+        for event in events[:12]:
+            images = event.get("images") or []
+            image = max(
+                images,
+                key=lambda item: item.get("width", 0) * item.get("height", 0),
+                default={},
+            ).get("url")
+            venue = (event.get("_embedded", {}).get("venues") or [{}])[0]
+            location_parts = [
+                venue.get("name"),
+                venue.get("city", {}).get("name"),
+                venue.get("state", {}).get("name"),
+            ]
+            start = event.get("dates", {}).get("start", {})
+            items.append(
+                {
+                    "id": str(event.get("id")),
+                    "title": event.get("name"),
+                    "overview": event.get("info")
+                    or event.get("pleaseNote")
+                    or f"Show {event.get('name', '')}".strip(),
+                    "date": start.get("localDate"),
+                    "starts_at": start.get("dateTime"),
+                    "location": " · ".join(
+                        part for part in location_parts if part
+                    ),
+                    "image": image,
+                    "url": event.get("url"),
+                }
+            )
+
+        return {
+            "source": source,
+            "configured": True,
+            "items": items,
+        }
+
     raise ValueError("Unknown catalog source")

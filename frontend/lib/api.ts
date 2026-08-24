@@ -13,11 +13,14 @@ const fieldLabels: Record<string, string> = {
   title: "Título",
   description: "Descrição",
   image_url: "Imagem (URL)",
+  event_type: "Tipo de evento",
   starts_at: "Data/hora",
   location: "Local",
   capacity: "Capacidade",
   price_cents: "Preço",
   external_id: "ID externo",
+  external_source: "Fonte externa",
+  quantity: "Quantidade",
 };
 
 type ValidationErrorDetail = {

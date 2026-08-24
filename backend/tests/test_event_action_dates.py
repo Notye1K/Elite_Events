@@ -39,6 +39,7 @@ def create_event_context(
     db: Session,
     *,
     starts_at: datetime,
+    event_type: str = "movie",
 ) -> tuple[User, User, Event, Seat]:
     organizer = User(
         name="Organizador",
@@ -64,7 +65,7 @@ def create_event_context(
     event = Event(
         title="Evento com regra de data",
         description="Descrição",
-        event_type="seated",
+        event_type=event_type,
         starts_at=starts_at,
         location="Local",
         capacity=1,
@@ -150,10 +151,15 @@ def test_client_can_reserve_event_from_current_day(db: Session):
     assert db.get(Seat, seat.id).status == "reserved"
 
 
-def test_gate_cannot_validate_ticket_from_previous_day(db: Session):
+@pytest.mark.parametrize("event_type", ["movie", "show"])
+def test_gate_cannot_validate_ticket_from_previous_day(
+    db: Session,
+    event_type: str,
+):
     client, gate, event, seat = create_event_context(
         db,
         starts_at=local_day_start(-1),
+        event_type=event_type,
     )
     ticket, token = create_ticket(db, client, event, seat)
 
@@ -169,14 +175,17 @@ def test_gate_cannot_validate_ticket_from_previous_day(db: Session):
     assert ticket.used_at is None
 
 
+@pytest.mark.parametrize("event_type", ["movie", "show"])
 @pytest.mark.parametrize("day_offset", [0, 1])
 def test_gate_can_validate_ticket_from_current_or_future_day(
     db: Session,
     day_offset: int,
+    event_type: str,
 ):
     client, gate, event, seat = create_event_context(
         db,
         starts_at=local_day_start(day_offset),
+        event_type=event_type,
     )
     ticket, token = create_ticket(db, client, event, seat)
 

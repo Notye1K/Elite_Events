@@ -21,7 +21,7 @@ def event_payload(image_url=None):
         "description": "Descrição",
         "starts_at": datetime.now(timezone.utc) + timedelta(hours=25),
         "location": "Local",
-        "capacity": 10,
+        "capacity": 200,
         "price_cents": 1000,
         "image_url": image_url,
     }
@@ -33,6 +33,40 @@ def test_event_image_url_is_optional():
 def test_event_image_url_must_be_http_url():
     with pytest.raises(ValueError):
         EventCreate(**event_payload("imagem-invalida"))
+
+def test_movie_has_fixed_capacity_of_two_hundred_seats():
+    payload = event_payload()
+    payload["capacity"] = 199
+    with pytest.raises(ValueError):
+        EventCreate(**payload)
+
+def test_show_requires_capacity_and_accepts_custom_value():
+    payload = event_payload()
+    payload.update({"event_type": "show", "capacity": 350})
+    event = EventCreate(**payload)
+    assert event.capacity == 350
+
+def test_ticketmaster_is_an_allowed_external_source():
+    payload = event_payload()
+    payload.update({"event_type": "show", "external_source": "ticketmaster"})
+    event = EventCreate(**payload)
+    assert event.external_source == "ticketmaster"
+
+@pytest.mark.parametrize(
+    ("event_type", "external_source"),
+    [("movie", "ticketmaster"), ("show", "tmdb")],
+)
+def test_external_source_must_match_event_type(event_type, external_source):
+    payload = event_payload()
+    payload.update(
+        {
+            "event_type": event_type,
+            "capacity": 200 if event_type == "movie" else 300,
+            "external_source": external_source,
+        }
+    )
+    with pytest.raises(ValueError):
+        EventCreate(**payload)
 
 def test_event_requires_at_least_24_hours_notice():
     payload = event_payload()

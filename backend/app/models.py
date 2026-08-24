@@ -22,7 +22,7 @@ class Event(Base):
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, default="")
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    event_type: Mapped[str] = mapped_column(String(30), default="seated")
+    event_type: Mapped[str] = mapped_column(String(30), default="movie")
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     location: Mapped[str] = mapped_column(String(255))
     capacity: Mapped[int] = mapped_column(Integer)

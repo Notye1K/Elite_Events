@@ -37,8 +37,8 @@ export default function Home() {
           <div className="eyebrow">Organizador</div>
           <h3>Catálogo externo</h3>
           <p className="muted">
-            O evento pode nascer de resultados do TMDb e ganhar data, local,
-            capacidade e preço próprios.
+            Filmes podem nascer do TMDb e shows da Ticketmaster, recebendo
+            data, local, capacidade e preço próprios.
           </p>
         </div>
         <div className="card">

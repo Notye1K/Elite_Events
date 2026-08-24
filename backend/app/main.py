@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from .config import settings
 from .db import get_db, initialize_database
@@ -88,9 +88,25 @@ def get_event(event_id: int, db: Session = Depends(get_db)):
 
 @app.get("/events/{event_id}/seats", response_model=list[SeatOut])
 def get_seats(event_id: int, db: Session = Depends(get_db)):
-    if not db.get(Event, event_id):
+    event = db.get(Event, event_id)
+    if not event:
         raise HTTPException(404, "Event not found")
+    if event.event_type == "show":
+        return []
     return list(db.scalars(select(Seat).where(Seat.event_id == event_id).order_by(Seat.row, Seat.number)).all())
+
+@app.get("/events/{event_id}/availability", response_model=EventAvailabilityOut)
+def get_event_availability(event_id: int, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    available = db.scalar(
+        select(func.count(Seat.id)).where(
+            Seat.event_id == event.id,
+            Seat.status == "available",
+        )
+    ) or 0
+    return EventAvailabilityOut(capacity=event.capacity, available=available)
 
 @app.post("/organizer/events", response_model=EventOut)
 def create_event(payload: EventCreate, user: User = Depends(role_required("organizer")), db: Session = Depends(get_db)):
@@ -147,7 +163,7 @@ def delete_event(event_id: int, user: User = Depends(role_required("organizer"))
     return {"message": "Evento excluído com sucesso."}
 
 @app.get("/external/catalog")
-def external_catalog(source: str = Query(pattern="^tmdb$"), q: str = Query(min_length=1, max_length=200)):
+def external_catalog(source: str = Query(pattern="^(tmdb|ticketmaster)$"), q: str = Query(min_length=1, max_length=200)):
     try:
         return catalog_search(source, q)
     except Exception as exc:
@@ -161,6 +177,8 @@ async def reserve_seats(
     payment: str,
     user: User,
     db: Session,
+    *,
+    general_admission: bool = False,
 ) -> list[ReservationOut]:
     ordered_seat_ids = sorted(seat_ids)
     seats = list(
@@ -183,6 +201,10 @@ async def reserve_seats(
     event = db.get(Event, seats[0].event_id)
     if not event or not event.published:
         raise HTTPException(404, "Evento não encontrado.")
+    if event.event_type == "show" and not general_admission:
+        raise HTTPException(400, "Shows devem ser reservados pela quantidade de ingressos.")
+    if event.event_type != "show" and general_admission:
+        raise HTTPException(400, "Este evento utiliza seleção de assentos.")
     if is_event_from_previous_day(event.starts_at):
         raise HTTPException(
             409,
@@ -224,10 +246,21 @@ async def reserve_seats(
             reservation_to_out(reservation, ticket.id if ticket else None)
         )
 
+    available_count = db.scalar(
+        select(func.count(Seat.id)).where(
+            Seat.event_id == event.id,
+            Seat.status == "available",
+        )
+    ) or 0
     for seat in seats:
         await manager.broadcast(
             event.id,
-            {"type": "seat_updated", "seat_id": seat.id, "status": seat.status},
+            {
+                "type": "seat_updated",
+                "seat_id": seat.id,
+                "status": seat.status,
+                "available_count": available_count,
+            },
         )
 
     return results
@@ -241,6 +274,42 @@ async def reserve(payload: ReservationCreate, user: User = Depends(role_required
 async def reserve_batch(payload: ReservationBatchCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
     return await reserve_seats(payload.seat_ids, payload.payment, user, db)
 
+@app.post("/reservations/general", response_model=list[ReservationOut])
+async def reserve_general(payload: GeneralReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+    event = db.get(Event, payload.event_id)
+    if not event or not event.published:
+        raise HTTPException(404, "Evento não encontrado.")
+    if event.event_type != "show":
+        raise HTTPException(400, "Este evento utiliza seleção de assentos.")
+    if is_event_from_previous_day(event.starts_at):
+        raise HTTPException(
+            409,
+            "Não é possível reservar ingressos para eventos de dias anteriores.",
+        )
+
+    inventory = list(
+        db.scalars(
+            select(Seat)
+            .where(
+                Seat.event_id == event.id,
+                Seat.status == "available",
+            )
+            .order_by(Seat.id)
+            .limit(payload.quantity)
+            .with_for_update(skip_locked=True)
+        ).all()
+    )
+    if len(inventory) != payload.quantity:
+        raise HTTPException(409, "Não há ingressos suficientes disponíveis.")
+
+    return await reserve_seats(
+        [seat.id for seat in inventory],
+        payload.payment,
+        user,
+        db,
+        general_admission=True,
+    )
+
 @app.post("/reservations/{reservation_id}/cancel", response_model=ReservationOut)
 async def cancel_reservation(reservation_id: int, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
     reservation = db.get(Reservation, reservation_id)
@@ -253,7 +322,21 @@ async def cancel_reservation(reservation_id: int, user: User = Depends(role_requ
     seat = db.get(Seat, reservation.seat_id); seat.status = "available"
     ticket.status = "cancelled"
     db.commit()
-    await manager.broadcast(reservation.event_id, {"type": "seat_updated", "seat_id": seat.id, "status": seat.status})
+    available_count = db.scalar(
+        select(func.count(Seat.id)).where(
+            Seat.event_id == reservation.event_id,
+            Seat.status == "available",
+        )
+    ) or 0
+    await manager.broadcast(
+        reservation.event_id,
+        {
+            "type": "seat_updated",
+            "seat_id": seat.id,
+            "status": seat.status,
+            "available_count": available_count,
+        },
+    )
     return reservation_to_out(reservation, ticket.id)
 
 @app.post("/tickets/{ticket_id}/cancel", response_model=ReservationOut)
@@ -265,13 +348,13 @@ async def cancel_ticket(ticket_id: int, user: User = Depends(role_required("clie
 
 @app.get("/tickets", response_model=list[TicketOut])
 def my_tickets(user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
-    stmt = select(Ticket, Event.title, Seat.label).join(Event, Event.id == Ticket.event_id).join(Reservation, Reservation.id == Ticket.reservation_id).join(Seat, Seat.id == Reservation.seat_id).where(Ticket.user_id == user.id).order_by(Ticket.id.desc())
+    stmt = select(Ticket, Event.title, Event.event_type, Seat.label).join(Event, Event.id == Ticket.event_id).join(Reservation, Reservation.id == Ticket.reservation_id).join(Seat, Seat.id == Reservation.seat_id).where(Ticket.user_id == user.id).order_by(Ticket.id.desc())
     rows = db.execute(stmt).all()
     out = []
     repaired_legacy_hash = False
     from .config import settings
     from .security import create_ticket_token
-    for ticket, title, seat_label in rows:
+    for ticket, title, event_type, seat_label in rows:
         token = create_ticket_token(
             ticket.id,
             ticket.event_id,
@@ -282,7 +365,7 @@ def my_tickets(user: User = Depends(role_required("client")), db: Session = Depe
         if ticket.token_hash != stable_token_hash:
             ticket.token_hash = stable_token_hash
             repaired_legacy_hash = True
-        out.append(TicketOut(id=ticket.id, event_id=ticket.event_id, event_title=title, seat_label=seat_label, token=token, status=ticket.status, share_url=f"{settings.frontend_url}/share/{token}", used_at=ticket.used_at))
+        out.append(TicketOut(id=ticket.id, event_id=ticket.event_id, event_title=title, event_type=event_type, seat_label=None if event_type == "show" else seat_label, token=token, status=ticket.status, share_url=f"{settings.frontend_url}/share/{token}", used_at=ticket.used_at))
     if repaired_legacy_hash:
         db.commit()
     return out
@@ -300,7 +383,7 @@ def share_ticket(token: str, db: Session = Depends(get_db)):
     reservation = db.get(Reservation, ticket.reservation_id)
     seat = db.get(Seat, reservation.seat_id)
     from .config import settings
-    return TicketOut(id=ticket.id, event_id=ticket.event_id, event_title=event.title, seat_label=seat.label, token=token, status=ticket.status, share_url=f"{settings.frontend_url}/share/{token}", used_at=ticket.used_at)
+    return TicketOut(id=ticket.id, event_id=ticket.event_id, event_title=event.title, event_type=event.event_type, seat_label=None if event.event_type == "show" else seat.label, token=token, status=ticket.status, share_url=f"{settings.frontend_url}/share/{token}", used_at=ticket.used_at)
 
 @app.post("/gate/validate", response_model=GateValidationOut)
 def validate_ticket(payload: GateValidationIn, user: User = Depends(role_required("gate")), db: Session = Depends(get_db)):

@@ -26,8 +26,8 @@ def run():
         if not db.scalar(select(Event).where(Event.title == "Noite de Cinema Elite")):
             event = Event(
                 title="Noite de Cinema Elite", description="Evento semeado para avaliação ponta a ponta.",
-                event_type="seated", starts_at=datetime.now(timezone.utc) + timedelta(days=14),
-                location="Cinema Central — Sala 01", capacity=40, price_cents=3500, published=True,
+                event_type="movie", starts_at=datetime.now(timezone.utc) + timedelta(days=14),
+                location="Cinema Central — Sala 01", capacity=200, price_cents=3500, published=True,
                 organizer_id=users["organizer"].id, external_source="tmdb", external_id="seed",
             )
             db.add(event); db.flush(); create_event_seats(db, event)

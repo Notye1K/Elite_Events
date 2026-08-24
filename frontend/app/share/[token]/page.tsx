@@ -24,7 +24,11 @@ export default function Share() {
           <div className="eyebrow">Ingresso compartilhado</div>
           <h1>{ticket.event_title}</h1>
           <p>
-            Assento <b>{ticket.seat_label}</b>
+            {ticket.event_type === "show" ? (
+              <b>Ingresso geral</b>
+            ) : (
+              <>Assento <b>{ticket.seat_label}</b></>
+            )}
           </p>
           <span className="pill">{ticketStatusLabel(ticket.status)}</span>
           <div className="ticket-actions">

@@ -15,6 +15,9 @@
 - [x] Digitação manual
 - [x] Válido / inválido / já utilizado / evento errado
 - [x] Adaptador TMDb
+- [x] Adaptador Ticketmaster Discovery API
+- [x] Filmes com 200 cadeiras em fileiras de 20
+- [x] Shows com estoque geral e contador em tempo real
 - [x] RBAC com 3 papéis
 - [x] Persistência
 - [x] Proteção contra venda duplicada

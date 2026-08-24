@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ticket_secret: str = "change-me-ticket-secret"
     frontend_url: str = "http://localhost:3000"
     tmdb_api_key: str | None = None
+    ticketmaster_api_key: str | None = None
     cors_origins: str = "http://localhost:3000"
     app_timezone: str = "America/Sao_Paulo"
 

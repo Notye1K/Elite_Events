@@ -7,8 +7,8 @@ Projeto completo do desafio em monorepo:
 - backend FastAPI + SQLAlchemy;
 - PostgreSQL via Docker Compose;
 - RBAC de organizador/cliente/portaria;
-- catálogo externo TMDb;
-- mapa de assentos com lock transacional;
+- catálogos externos TMDb (filmes) e Ticketmaster (shows);
+- mapa de 200 assentos para filmes e estoque geral para shows, ambos com lock transacional;
 - pagamento simulado aprovado/recusado;
 - cancelamento com devolução de estoque;
 - ingresso QR assinado e link público;

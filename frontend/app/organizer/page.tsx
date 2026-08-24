@@ -28,25 +28,31 @@ function isValidImageUrl(value: string) {
 
 export default function Organizer() {
   const [events, setEvents] = useState<any[]>([]);
-  const [catalog, setCatalog] = useState<any[]>([]);
+  const [tmdbCatalog, setTmdbCatalog] = useState<any[]>([]);
+  const [ticketmasterCatalog, setTicketmasterCatalog] = useState<any[]>([]);
   const [form, setForm] = useState({
     title: "",
     description: "",
     image_url: "",
-    event_type: "seated",
+    event_type: "movie",
     starts_at: "",
     location: "",
-    capacity: "",
+    capacity: "200",
     price_cents: "",
     published: true,
     external_source: "tmdb",
     external_id: "",
   });
-  const [q, setQ] = useState("");
-  const [catalogStatus, setCatalogStatus] = useState<
+  const [tmdbQuery, setTmdbQuery] = useState("");
+  const [tmdbStatus, setTmdbStatus] = useState<
     "idle" | "loading" | "success" | "empty"
   >("idle");
-  const [lastCatalogQuery, setLastCatalogQuery] = useState("");
+  const [lastTmdbQuery, setLastTmdbQuery] = useState("");
+  const [ticketmasterQuery, setTicketmasterQuery] = useState("");
+  const [ticketmasterStatus, setTicketmasterStatus] = useState<
+    "idle" | "loading" | "success" | "empty"
+  >("idle");
+  const [lastTicketmasterQuery, setLastTicketmasterQuery] = useState("");
   const [error, setError] = useState("");
   const [deletingEventId, setDeletingEventId] = useState<number | null>(null);
   const minimumEventDate = new Date(Date.now() + 24 * HOUR_IN_MS);
@@ -76,21 +82,21 @@ export default function Organizer() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [error]);
-  async function search() {
-    if (catalogStatus === "loading") return;
+  async function searchTmdb() {
+    if (tmdbStatus === "loading") return;
 
-    const query = q.trim();
+    const query = tmdbQuery.trim();
     if (!query) {
-      setCatalog([]);
-      setLastCatalogQuery("");
-      setCatalogStatus("empty");
+      setTmdbCatalog([]);
+      setLastTmdbQuery("");
+      setTmdbStatus("empty");
       return;
     }
 
     setError("");
-    setCatalog([]);
-    setCatalogStatus("loading");
-    setLastCatalogQuery(query);
+    setTmdbCatalog([]);
+    setTmdbStatus("loading");
+    setLastTmdbQuery(query);
     try {
       const r = await api(
         `/external/catalog?source=tmdb&q=${encodeURIComponent(query)}`,
@@ -98,11 +104,43 @@ export default function Organizer() {
       if (!r.configured) {
         throw new ApiError("A integração com o TMDb não está configurada.");
       }
-      setCatalog(r.items);
-      setCatalogStatus(r.items.length > 0 ? "success" : "empty");
+      setTmdbCatalog(r.items);
+      setTmdbStatus(r.items.length > 0 ? "success" : "empty");
     } catch (error) {
-      setCatalog([]);
-      setCatalogStatus("idle");
+      setTmdbCatalog([]);
+      setTmdbStatus("idle");
+      setError(getErrorMessage(error));
+    }
+  }
+  async function searchTicketmaster() {
+    if (ticketmasterStatus === "loading") return;
+
+    const query = ticketmasterQuery.trim();
+    if (!query) {
+      setTicketmasterCatalog([]);
+      setLastTicketmasterQuery("");
+      setTicketmasterStatus("empty");
+      return;
+    }
+
+    setError("");
+    setTicketmasterCatalog([]);
+    setTicketmasterStatus("loading");
+    setLastTicketmasterQuery(query);
+    try {
+      const r = await api(
+        `/external/catalog?source=ticketmaster&q=${encodeURIComponent(query)}`,
+      );
+      if (!r.configured) {
+        throw new ApiError(
+          "A integração com a Ticketmaster não está configurada.",
+        );
+      }
+      setTicketmasterCatalog(r.items);
+      setTicketmasterStatus(r.items.length > 0 ? "success" : "empty");
+    } catch (error) {
+      setTicketmasterCatalog([]);
+      setTicketmasterStatus("idle");
       setError(getErrorMessage(error));
     }
   }
@@ -118,23 +156,30 @@ export default function Organizer() {
           capacity: Number(form.capacity),
           price_cents: Number(form.price_cents),
           image_url: form.image_url.trim() || null,
+          external_source: form.external_id ? form.external_source : null,
         }),
       });
       setForm({
-        ...form,
         title: "",
         description: "",
         image_url: "",
+        event_type: "movie",
         starts_at: "",
         location: "",
-        capacity: "",
+        capacity: "200",
         price_cents: "",
+        published: true,
+        external_source: "tmdb",
         external_id: "",
       });
-      setCatalog([]);
-      setQ("");
-      setCatalogStatus("idle");
-      setLastCatalogQuery("");
+      setTmdbCatalog([]);
+      setTmdbQuery("");
+      setTmdbStatus("idle");
+      setLastTmdbQuery("");
+      setTicketmasterCatalog([]);
+      setTicketmasterQuery("");
+      setTicketmasterStatus("idle");
+      setLastTicketmasterQuery("");
       load();
     } catch (error) {
       setError(getErrorMessage(error));
@@ -203,77 +248,177 @@ export default function Organizer() {
         </div>
       </div>
       <div className="grid">
-        <div className="card">
-          <h2>Encontre um filme do TMDb</h2>
-          <div className="row">
-            <input
-              value={q}
-              placeholder="Digite o nome do filme"
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && search()}
-              maxLength={200}
-            />
-            <button
-              className="btn ghost"
-              onClick={search}
-              disabled={catalogStatus === "loading"}
-            >
-              {catalogStatus === "loading" ? "Buscando…" : "Buscar"}
-            </button>
-          </div>
-          <div className="catalog-feedback" aria-live="polite">
-            {catalogStatus === "loading" && (
-              <span role="status">
-                <span className="catalog-spinner" aria-hidden="true" />
-                Buscando filmes no TMDb…
-              </span>
-            )}
-            {catalogStatus === "empty" && (
-              <span role="status">
-                {lastCatalogQuery
-                  ? `Nenhum filme encontrado para “${lastCatalogQuery}”.`
-                  : "Digite o nome de um filme para pesquisar."}
-              </span>
-            )}
-          </div>
-          <div className="catalog-results">
-            {catalog.map((c) => (
+        <div className="organizer-catalog-column">
+          <div className="card">
+            <h2>Encontre um filme do TMDb</h2>
+            <div className="row">
+              <input
+                value={tmdbQuery}
+                placeholder="Digite o nome do filme"
+                onChange={(e) => setTmdbQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchTmdb()}
+                maxLength={200}
+              />
               <button
-                key={c.id}
-                type="button"
-                className="catalog-movie"
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    title: c.title,
-                    description: c.overview || "",
-                    image_url: c.image || "",
-                    external_id: c.id,
-                  }))
-                }
+                className="btn ghost"
+                onClick={searchTmdb}
+                disabled={tmdbStatus === "loading"}
               >
-                {c.image ? (
-                  <Image
-                    src={c.image}
-                    alt={`Pôster de ${c.title}`}
-                    width={72}
-                    height={108}
-                    className="catalog-movie-image"
-                  />
-                ) : (
-                  <span className="catalog-movie-placeholder">Sem imagem</span>
-                )}
-                <span className="catalog-movie-info">
-                  <strong>{c.title}</strong>
-                  {c.date && <small>{c.date.slice(0, 4)}</small>}
-                </span>
+                {tmdbStatus === "loading" ? "Buscando…" : "Buscar"}
               </button>
-            ))}
+            </div>
+            <div className="catalog-feedback" aria-live="polite">
+              {tmdbStatus === "loading" && (
+                <span role="status">
+                  <span className="catalog-spinner" aria-hidden="true" />
+                  Buscando filmes no TMDb…
+                </span>
+              )}
+              {tmdbStatus === "empty" && (
+                <span role="status">
+                  {lastTmdbQuery
+                    ? `Nenhum filme encontrado para “${lastTmdbQuery}”.`
+                    : "Digite o nome de um filme para pesquisar."}
+                </span>
+              )}
+            </div>
+            <div className="catalog-results">
+              {tmdbCatalog.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="catalog-movie"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      title: c.title,
+                      description: c.overview || "",
+                      image_url: c.image || "",
+                      event_type: "movie",
+                      capacity: "200",
+                      external_source: "tmdb",
+                      external_id: c.id,
+                    }))
+                  }
+                >
+                  {c.image ? (
+                    <Image
+                      src={c.image}
+                      alt={`Pôster de ${c.title}`}
+                      width={72}
+                      height={108}
+                      className="catalog-movie-image"
+                    />
+                  ) : (
+                    <span className="catalog-movie-placeholder">Sem imagem</span>
+                  )}
+                  <span className="catalog-movie-info">
+                    <strong>{c.title}</strong>
+                    {c.date && <small>{c.date.slice(0, 4)}</small>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <h2>Encontre um show na Ticketmaster</h2>
+            <div className="row">
+              <input
+                value={ticketmasterQuery}
+                placeholder="Digite o nome do artista ou show"
+                onChange={(e) => setTicketmasterQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchTicketmaster()}
+                maxLength={200}
+              />
+              <button
+                className="btn ghost"
+                onClick={searchTicketmaster}
+                disabled={ticketmasterStatus === "loading"}
+              >
+                {ticketmasterStatus === "loading" ? "Buscando…" : "Buscar"}
+              </button>
+            </div>
+            <div className="catalog-feedback" aria-live="polite">
+              {ticketmasterStatus === "loading" && (
+                <span role="status">
+                  <span className="catalog-spinner" aria-hidden="true" />
+                  Buscando shows na Ticketmaster…
+                </span>
+              )}
+              {ticketmasterStatus === "empty" && (
+                <span role="status">
+                  {lastTicketmasterQuery
+                    ? `Nenhum show encontrado para “${lastTicketmasterQuery}”.`
+                    : "Digite o nome de um artista ou show para pesquisar."}
+                </span>
+              )}
+            </div>
+            <div className="catalog-results">
+              {ticketmasterCatalog.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="catalog-movie"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      title: c.title,
+                      description: c.overview || "",
+                      image_url: c.image || "",
+                      event_type: "show",
+                      starts_at: c.starts_at
+                        ? toDateTimeLocal(new Date(c.starts_at))
+                        : f.starts_at,
+                      location: c.location || f.location,
+                      capacity: f.event_type === "show" ? f.capacity : "",
+                      external_source: "ticketmaster",
+                      external_id: c.id,
+                    }))
+                  }
+                >
+                  {c.image ? (
+                    <Image
+                      src={c.image}
+                      alt={`Imagem de ${c.title}`}
+                      width={72}
+                      height={108}
+                      className="catalog-movie-image"
+                    />
+                  ) : (
+                    <span className="catalog-movie-placeholder">Sem imagem</span>
+                  )}
+                  <span className="catalog-movie-info">
+                    <strong>{c.title}</strong>
+                    {c.date && <small>{c.date}</small>}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="card">
           <h2>Novo evento</h2>
           <form className="form" onSubmit={create}>
+            <label>
+              Tipo de evento
+              <select
+                value={form.event_type}
+                onChange={(e) => {
+                  const eventType = e.target.value;
+                  setForm({
+                    ...form,
+                    event_type: eventType,
+                    capacity: eventType === "movie" ? "200" : "",
+                    external_source:
+                      eventType === "movie" ? "tmdb" : "ticketmaster",
+                    external_id: "",
+                  });
+                }}
+              >
+                <option value="movie">Filme</option>
+                <option value="show">Show</option>
+              </select>
+            </label>
             {isValidImageUrl(form.image_url) && (
               <Image
                 src={form.image_url}
@@ -353,8 +498,14 @@ export default function Organizer() {
                   min="1"
                   max="1000"
                   step="1"
+                  disabled={form.event_type === "movie"}
                   required
                 />
+                <span className="muted">
+                  {form.event_type === "movie"
+                    ? "Filmes usam 200 cadeiras fixas, em fileiras de 20."
+                    : "Informe a quantidade total de ingressos do show."}
+                </span>
               </label>
               <label>
                 Preço (centavos)

@@ -22,7 +22,9 @@ export default function Tickets() {
   }, []);
   async function cancelTicket(ticket: any) {
     const confirmed = window.confirm(
-      `Deseja cancelar o ingresso para “${ticket.event_title}”, assento ${ticket.seat_label}?`,
+      ticket.event_type === "show"
+        ? `Deseja cancelar o ingresso geral para “${ticket.event_title}”?`
+        : `Deseja cancelar o ingresso para “${ticket.event_title}”, assento ${ticket.seat_label}?`,
     );
     if (!confirmed) return;
 
@@ -36,7 +38,11 @@ export default function Tickets() {
           item.id === ticket.id ? { ...item, status: "cancelled" } : item,
         ),
       );
-      setMessage("Ingresso cancelado. O assento voltou a ficar disponível.");
+      setMessage(
+        ticket.event_type === "show"
+          ? "Ingresso cancelado. Uma unidade voltou ao estoque do show."
+          : "Ingresso cancelado. O assento voltou a ficar disponível.",
+      );
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -63,7 +69,11 @@ export default function Tickets() {
                 <span className="pill">{ticketStatusLabel(t.status)}</span>
                 <h2>{t.event_title}</h2>
                 <p>
-                  Assento <b>{t.seat_label}</b>
+                  {t.event_type === "show" ? (
+                    <b>Ingresso geral</b>
+                  ) : (
+                    <>Assento <b>{t.seat_label}</b></>
+                  )}
                 </p>
                 <div className="ticket-actions">
                   <a

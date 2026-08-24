@@ -89,6 +89,7 @@ def test_events_and_seats_are_public_for_every_role(access_context):
         assert api_client.get("/events").status_code == 200
         assert api_client.get(f"/events/{event.id}").status_code == 200
         assert api_client.get(f"/events/{event.id}/seats").status_code == 200
+        assert api_client.get(f"/events/{event.id}/availability").status_code == 200
 
 
 @pytest.mark.parametrize(
@@ -153,3 +154,18 @@ def test_only_client_role_can_request_ticket_cancellation(access_context):
 
     authenticate_as(users["client"])
     assert api_client.post("/tickets/999/cancel").status_code == 404
+
+
+def test_only_client_can_purchase_general_admission(access_context):
+    api_client, users, _, _ = access_context
+    payload = {"event_id": 999, "quantity": 1, "payment": "approve"}
+
+    authenticate_as(None)
+    assert api_client.post("/reservations/general", json=payload).status_code == 401
+
+    for role in ("organizer", "gate"):
+        authenticate_as(users[role])
+        assert api_client.post("/reservations/general", json=payload).status_code == 403
+
+    authenticate_as(users["client"])
+    assert api_client.post("/reservations/general", json=payload).status_code == 404

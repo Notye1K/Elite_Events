@@ -40,11 +40,12 @@ def create_event_with_seat(
     db: Session,
     organizer: User,
     starts_at: datetime,
+    event_type: str,
 ) -> tuple[Event, Seat]:
     event = Event(
         title="Evento de teste",
         description="Descrição",
-        event_type="seated",
+        event_type=event_type,
         starts_at=starts_at,
         location="Local",
         capacity=1,
@@ -85,12 +86,17 @@ def create_reservation(
     return reservation
 
 
-def test_organizer_can_delete_own_future_event_without_reservations(db: Session):
+@pytest.mark.parametrize("event_type", ["movie", "show"])
+def test_organizer_can_delete_own_future_event_without_reservations(
+    db: Session,
+    event_type: str,
+):
     organizer = create_user(db, "organizer@teste.dev", "organizer")
     event, _ = create_event_with_seat(
         db,
         organizer,
         datetime.now(timezone.utc) + timedelta(days=2),
+        event_type,
     )
     event_id = event.id
 
@@ -99,13 +105,18 @@ def test_organizer_can_delete_own_future_event_without_reservations(db: Session)
     assert db.get(Event, event_id) is None
 
 
-def test_organizer_cannot_delete_another_organizers_event(db: Session):
+@pytest.mark.parametrize("event_type", ["movie", "show"])
+def test_organizer_cannot_delete_another_organizers_event(
+    db: Session,
+    event_type: str,
+):
     owner = create_user(db, "owner@teste.dev", "organizer")
     another_organizer = create_user(db, "another@teste.dev", "organizer")
     event, _ = create_event_with_seat(
         db,
         owner,
         datetime.now(timezone.utc) + timedelta(days=2),
+        event_type,
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -115,13 +126,18 @@ def test_organizer_cannot_delete_another_organizers_event(db: Session):
     assert db.get(Event, event.id) is not None
 
 
-def test_organizer_can_delete_past_event_with_reservations(db: Session):
+@pytest.mark.parametrize("event_type", ["movie", "show"])
+def test_organizer_can_delete_past_event_with_reservations(
+    db: Session,
+    event_type: str,
+):
     organizer = create_user(db, "organizer@teste.dev", "organizer")
     client = create_user(db, "client@teste.dev", "client")
     event, seat = create_event_with_seat(
         db,
         organizer,
         datetime.now(timezone.utc) - timedelta(hours=1),
+        event_type,
     )
     reservation = create_reservation(db, event, seat, client)
     ticket = Ticket(
@@ -143,13 +159,18 @@ def test_organizer_can_delete_past_event_with_reservations(db: Session):
     assert db.scalar(select(Ticket).where(Ticket.event_id == event_id)) is None
 
 
-def test_organizer_cannot_delete_future_event_with_reservation(db: Session):
+@pytest.mark.parametrize("event_type", ["movie", "show"])
+def test_organizer_cannot_delete_future_event_with_reservation(
+    db: Session,
+    event_type: str,
+):
     organizer = create_user(db, "organizer@teste.dev", "organizer")
     client = create_user(db, "client@teste.dev", "client")
     event, seat = create_event_with_seat(
         db,
         organizer,
         datetime.now(timezone.utc) + timedelta(days=2),
+        event_type,
     )
     create_reservation(db, event, seat, client)
 
