@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
@@ -54,6 +54,34 @@ class Reservation(Base):
     status: Mapped[str] = mapped_column(String(30), default="pending")
     payment_status: Mapped[str] = mapped_column(String(30), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class PaymentCheckout(Base):
+    __tablename__ = "payment_checkouts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(30), default="stripe")
+    provider_session_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    checkout_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(3), default="brl")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class CheckoutReservation(Base):
+    __tablename__ = "checkout_reservations"
+    checkout_id: Mapped[str] = mapped_column(
+        ForeignKey("payment_checkouts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    reservation_id: Mapped[int] = mapped_column(
+        ForeignKey("reservations.id", ondelete="CASCADE"),
+        primary_key=True,
+        unique=True,
+    )
 
 class Ticket(Base):
     __tablename__ = "tickets"

@@ -5,6 +5,7 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, UrlConstraints, f
 MAX_EVENT_DESCRIPTION_LENGTH = 5_000
 MAX_EVENT_PRICE_CENTS = 10_000_000
 MAX_EVENT_ADVANCE_DAYS = 3_650
+MAX_CHECKOUT_TICKETS = 20
 EventImageUrl = Annotated[AnyHttpUrl, UrlConstraints(max_length=500)]
 
 class UserCreate(BaseModel):
@@ -140,6 +141,35 @@ class TicketOut(BaseModel):
 class EventAvailabilityOut(BaseModel):
     capacity: int
     available: int
+
+class CheckoutCreate(BaseModel):
+    event_id: int
+    seat_ids: list[int] = Field(default_factory=list, max_length=MAX_CHECKOUT_TICKETS)
+    quantity: int | None = Field(default=None, ge=1, le=MAX_CHECKOUT_TICKETS)
+
+    @field_validator("seat_ids")
+    @classmethod
+    def require_distinct_checkout_seats(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("não pode conter assentos repetidos")
+        return value
+
+class CheckoutOut(BaseModel):
+    id: str
+    status: str
+    checkout_url: str | None
+    event_id: int
+    event_title: str
+    event_type: str
+    quantity: int
+    seat_labels: list[str]
+    amount_cents: int
+    currency: str
+    expires_at: datetime
+    ticket_ids: list[int] = Field(default_factory=list)
+
+class CheckoutSyncIn(BaseModel):
+    session_id: str = Field(min_length=1, max_length=255)
 
 class GateValidationIn(BaseModel):
     code: str

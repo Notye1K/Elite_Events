@@ -31,6 +31,7 @@ export default function EventDetail() {
   const [selected, setSelected] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [creatingCheckout, setCreatingCheckout] = useState(false);
 
   async function load() {
     const loadedEvent = await api(`/events/${id}`);
@@ -182,31 +183,24 @@ export default function EventDetail() {
 
     setError("");
     setMessage("");
+    setCreatingCheckout(true);
     try {
-      const reservations = await api(
-        isShow ? "/reservations/general" : "/reservations/batch",
-        {
-          method: "POST",
-          body: JSON.stringify(
-            isShow
-              ? {
-                  event_id: Number(id),
-                  quantity: ticketQuantity,
-                  payment: "approve",
-                }
-              : { seat_ids: selected, payment: "approve" },
-          ),
-        },
-      );
-      setMessage(
-        `Pagamento aprovado. ${reservations.length} ${reservations.length === 1 ? "ingresso criado" : "ingressos criados"}.`,
-      );
+      const checkout = await api("/checkout/sessions", {
+        method: "POST",
+        body: JSON.stringify(
+          isShow
+            ? { event_id: Number(id), quantity: ticketQuantity }
+            : { event_id: Number(id), seat_ids: selected },
+        ),
+      });
       setSelected([]);
       setTicketQuantity(1);
-      setTimeout(() => router.push("/tickets"), 600);
+      router.push(`/checkout/${checkout.id}`);
     } catch (caughtError: any) {
       setError(caughtError.message);
       load();
+    } finally {
+      setCreatingCheckout(false);
     }
   }
 
@@ -355,9 +349,15 @@ export default function EventDetail() {
                 <button
                   className="btn primary"
                   onClick={reserve}
-                  disabled={!availability || availability.available === 0}
+                  disabled={
+                    creatingCheckout ||
+                    !availability ||
+                    availability.available === 0
+                  }
                 >
-                  Pagar simulado
+                  {creatingCheckout
+                    ? "Preparando pagamento…"
+                    : "Continuar para pagamento"}
                 </button>
               </div>
             ) : (
@@ -380,8 +380,14 @@ export default function EventDetail() {
                   )}
                 </div>
                 <div className="row">
-                  <button className="btn primary" onClick={reserve}>
-                    Pagar simulado
+                  <button
+                    className="btn primary"
+                    onClick={reserve}
+                    disabled={creatingCheckout || selected.length === 0}
+                  >
+                    {creatingCheckout
+                      ? "Preparando pagamento…"
+                      : "Continuar para pagamento"}
                   </button>
                   <button
                     className="btn ghost"

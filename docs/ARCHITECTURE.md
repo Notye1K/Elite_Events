@@ -27,6 +27,8 @@ PostgreSQL
 - `events`: publicação e metadados editoriais.
 - `seats`: inventário de cadeiras de filme ou unidades gerais de show; unidades de show não são expostas como assentos.
 - `reservations`: intenção/estado de compra.
+- `payment_checkouts`: sessão de compra, valor calculado no backend, expiração e IDs da Stripe.
+- `checkout_reservations`: associação entre uma sessão de pagamento e suas reservas.
 - `tickets`: ingresso final, estado de uso e material criptográfico associado.
 
 ## Invariantes
@@ -38,6 +40,8 @@ PostgreSQL
 5. Ticket de outro evento nunca é aceito na portaria.
 6. Token com assinatura inválida ou hash incompatível não é aceito.
 7. Cancelar reserva devolve a unidade de estoque para `available` e invalida o ticket.
+8. Ticket só é criado depois que a Stripe confirma `payment_status=paid`; webhooks repetidos são idempotentes.
+9. Checkouts pendentes, cancelados ou expirados não geram tickets e liberam o estoque.
 8. Filmes têm 200 cadeiras em fileiras de 20; shows exigem capacidade e não permitem escolha de assento.
 
 ## Deployment topology

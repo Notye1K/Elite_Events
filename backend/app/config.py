@@ -11,8 +11,29 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     tmdb_api_key: str | None = None
     ticketmaster_api_key: str | None = None
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_currency: str = "brl"
+    stripe_checkout_expiration_minutes: int = 30
+    stripe_test_mode: bool = True
+    enable_simulated_payments: bool = False
     cors_origins: str = "http://localhost:3000"
     app_timezone: str = "America/Sao_Paulo"
+
+    @field_validator("stripe_checkout_expiration_minutes")
+    @classmethod
+    def validate_stripe_checkout_expiration(cls, value: int) -> int:
+        if not 30 <= value <= 1440:
+            raise ValueError("must be between 30 minutes and 24 hours")
+        return value
+
+    @field_validator("stripe_currency")
+    @classmethod
+    def normalize_stripe_currency(cls, value: str) -> str:
+        value = value.strip().lower()
+        if len(value) != 3 or not value.isalpha():
+            raise ValueError("must be a three-letter ISO currency code")
+        return value
 
     @field_validator("app_timezone")
     @classmethod

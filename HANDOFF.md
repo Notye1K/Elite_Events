@@ -9,7 +9,7 @@ Projeto completo do desafio em monorepo:
 - RBAC de organizador/cliente/portaria;
 - catálogos externos TMDb (filmes) e Ticketmaster (shows);
 - mapa de 200 assentos para filmes e estoque geral para shows, ambos com lock transacional;
-- pagamento simulado aprovado/recusado;
+- Stripe Checkout em sandbox, com cartões de teste, webhook assinado e reserva temporária;
 - cancelamento com devolução de estoque;
 - ingresso QR assinado e link público;
 - validação de portaria com replay protection;

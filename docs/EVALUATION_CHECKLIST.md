@@ -8,6 +8,8 @@
 - [x] Mapa de assentos
 - [x] Pagamento aprovado
 - [x] Pagamento recusado
+- [x] Stripe Checkout em sandbox com cartões oficiais de teste
+- [x] Webhook assinado, idempotente e com devolução de estoque em falha/expiração
 - [x] Meus ingressos
 - [x] QR
 - [x] Link compartilhável

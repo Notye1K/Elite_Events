@@ -1,6 +1,6 @@
 # Elite Dev — Plataforma de Eventos e Ingressos
 
-Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no frontend, **FastAPI + Python** no backend e **PostgreSQL** como banco. O fluxo foi desenhado para passar pelo cenário completo: catálogo externo → publicação → busca → escolha de assento ou quantidade → pagamento simulado → ingresso com QR → compartilhamento → validação de portaria.
+Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no frontend, **FastAPI + Python** no backend e **PostgreSQL** como banco. O fluxo foi desenhado para passar pelo cenário completo: catálogo externo → publicação → busca → escolha de assento ou quantidade → Checkout Stripe em sandbox → ingresso com QR → compartilhamento → validação de portaria.
 
 > O desafio pede um fluxo ponta a ponta simples e completo, documentação clara e dados semeados. Os opcionais também foram implementados: busca/filtro, painel do organizador, cancelamento com devolução ao estoque, mapa de assentos em atualização em tempo real, Docker Compose, testes e preparação para deploy. fileciteturn0file0L67-L85
 
@@ -9,7 +9,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 - **Frontend:** Next.js 16, React 19, TypeScript, CSS próprio.
 - **Backend:** FastAPI, SQLAlchemy, PyJWT.
 - **Banco:** PostgreSQL 17.
-- **Integrações externas:** TMDb para filmes e Ticketmaster Discovery API para shows (chaves opcionais).
+- **Integrações externas:** TMDb para filmes, Ticketmaster Discovery API para shows e Stripe Checkout para pagamentos em ambiente de teste.
 - **QR:** `qrcode.react` no cliente e token JWT assinado no backend.
 - **Leitura:** `html5-qrcode`, com digitação manual como fallback.
 - **Infra:** Docker Compose.
@@ -18,7 +18,7 @@ Implementação do desafio **Elite Dev 2026**, com **Next.js + React** no fronte
 ## Como rodar com Docker
 
 1. Copie `.env.example` para `.env`.
-2. Opcionalmente preencha `TMDB_API_KEY` para filmes e `TICKETMASTER_API_KEY` para shows.
+2. Opcionalmente preencha `TMDB_API_KEY` para filmes e `TICKETMASTER_API_KEY` para shows. Para testar compras, preencha `STRIPE_SECRET_KEY` com uma chave de sandbox/teste e `STRIPE_WEBHOOK_SECRET` com o segredo do webhook.
 3. Rode:
 
 ```bash
@@ -59,10 +59,38 @@ Em um banco novo, o seed cria o evento publicado **Noite de Cinema Elite** com 2
 1. Entre com `cliente1@elite.dev`.
 2. Acesse **Eventos**.
 3. Em um filme, escolha um ou mais assentos; em um show, escolha a quantidade no estoque geral.
-4. Clique em **Pagar simulado**. No mapa de filme, **Cancelar** limpa todas as seleções ainda não enviadas.
-5. Abra **Meus ingressos** para ver o QR, copiar o código usado na portaria ou abrir o link compartilhável.
-6. Abra o link em outra aba ou dispositivo para testar a visualização pública do ingresso.
-7. Em **Meus ingressos**, cancele um ingresso válido para demonstrar a devolução do assento ao estoque.
+4. Clique em **Continuar para pagamento**, revise a compra e abra o Checkout da Stripe.
+5. No sandbox, use `4242 4242 4242 4242` para aprovação, `4000 0000 0000 0002` para recusa genérica ou `4000 0000 0000 9995` para saldo insuficiente. Use qualquer data futura e CVC de três dígitos.
+6. Após a confirmação, abra **Meus ingressos** para ver o QR, copiar o código usado na portaria ou abrir o link compartilhável.
+7. Abra o link em outra aba ou dispositivo para testar a visualização pública do ingresso.
+8. Em **Meus ingressos**, cancele um ingresso válido para demonstrar o reembolso no sandbox e a devolução do estoque.
+
+### Stripe local com Docker
+
+O frontend usa o Checkout hospedado; portanto, a chave pública da Stripe não é necessária. A chave secreta nunca é enviada ao navegador.
+
+Para receber webhooks enquanto o backend roda no Docker:
+
+```bash
+stripe login
+stripe listen --forward-to localhost:8000/payments/stripe/webhook
+```
+
+Copie o segredo `whsec_...` exibido pela Stripe CLI para `STRIPE_WEBHOOK_SECRET` no `.env`. Como as variáveis são injetadas pelo Compose na criação do container, recrie o backend depois de alterar o `.env`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --force-recreate backend
+```
+
+Mantenha o `stripe listen` aberto durante o teste. Em produção, cadastre `https://SEU-BACKEND.onrender.com/payments/stripe/webhook` no Workbench da Stripe e selecione `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` e `checkout.session.expired`.
+
+Se a criação do pagamento falhar, acompanhe o backend em outro terminal:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f backend
+```
+
+O frontend recebe uma mensagem segura e o backend registra o traceback com o identificador do checkout, evento e tipo da exceção da Stripe. As chaves não são incluídas nessas mensagens pela aplicação.
 
 ### Portaria
 
@@ -152,7 +180,7 @@ Filmes usam capacidade fixa de 200 cadeiras em 10 fileiras de 20. O mapa torna a
 
 Shows não expõem assentos: a tela mostra um contador de ingressos disponíveis e uma seleção de quantidade. Internamente, cada ingresso geral ainda é uma unidade de estoque bloqueável, permitindo reutilizar as garantias de concorrência, cancelamento, exclusão e WebSocket sem criar uma segunda arquitetura de reservas.
 
-Filmes usam `POST /reservations/batch`; shows usam `POST /reservations/general`. Os dois endpoints criam um ingresso individual para cada unidade aprovada.
+Filmes e shows iniciam a compra por `POST /checkout/sessions`. Os antigos endpoints `POST /reservations/batch` e `POST /reservations/general` foram mantidos apenas como compatibilidade de testes, marcados como legados e desativados por padrão por `ENABLE_SIMULATED_PAYMENTS=false`.
 
 ### 2. Concorrência no estoque
 
@@ -164,9 +192,21 @@ O QR não carrega apenas um ID previsível. Ele contém um JWT assinado com segr
 
 O `iat` do JWT é derivado da data persistida de criação do ingresso. Assim, a tela **Meus ingressos** sempre reconstrói exatamente o mesmo token e o link compartilhável continua compatível com o hash salvo no banco. Ao listar ingressos antigos, o backend corrige automaticamente hashes criados antes dessa regra.
 
-### 4. Pagamento simulado
+### 4. Checkout Stripe e reserva temporária
 
-O backend mantém os caminhos `approve` e `decline` exigidos pelo desafio. A recusa libera novamente o estoque e não cria ingresso. A interface principal usa aprovação; no filme, **Cancelar** apenas limpa a seleção local antes da compra.
+Ao criar um checkout, o backend bloqueia as unidades de estoque com `SELECT ... FOR UPDATE`, cria reservas `pending` e uma linha em `payment_checkouts`. O Checkout hospedado pela Stripe recebe o preço calculado exclusivamente no backend; o navegador nunca informa o valor cobrado.
+
+A sessão expira em cerca de 30 minutos, que é o mínimo aceito pela Stripe. Enquanto estiver aberta, os assentos ou ingressos gerais ficam indisponíveis para outros clientes. O fluxo de estados é:
+
+- `pending` — estoque temporariamente reservado e Checkout aberto;
+- `processing` — método assíncrono concluído no Checkout, mas ainda sem confirmação financeira;
+- `paid` — webhook ou sincronização autenticada confirmou o pagamento e criou um ingresso por reserva;
+- `failed`, `cancelled` ou `expired` — nenhuma entrada é criada e o estoque volta a `available`;
+- `partially_refunded` ou `refunded` — um ou todos os ingressos da compra foram cancelados.
+
+O endpoint `POST /payments/stripe/webhook` valida o corpo original com `Stripe-Signature` e `STRIPE_WEBHOOK_SECRET`. A confirmação é idempotente: reenvios do mesmo evento não duplicam ingressos. A página de retorno também consulta a sessão diretamente na Stripe para tolerar atraso na entrega do webhook, mas nunca confia apenas nos parâmetros da URL.
+
+Eventos com preço zero são confirmados internamente sem criar uma cobrança Stripe. O cancelamento de um ingresso pago solicita um reembolso parcial do valor daquele ingresso usando uma chave de idempotência; o estoque só é devolvido se a Stripe aceitar o reembolso.
 
 ### 5. Compartilhamento
 
@@ -189,7 +229,7 @@ Em uma aplicação de produção, essa regra poderia ser retomada como uma janel
 - JWT de sessão tem expiração e deve usar segredos fortes em produção.
 - O QR é assinado, mas o compartilhamento de um ingresso continua sendo compartilhamento de posse; a autenticação de cliente não é usada para bloquear o link público.
 - Não há recuperação de senha, e-mail, nota fiscal, revenda ou app nativo porque o próprio desafio exclui esses itens do escopo.
-- O pagamento é deliberadamente simulado.
+- A Stripe está integrada em sandbox para a demonstração. Com `STRIPE_TEST_MODE=true`, o backend recusa chaves que não comecem com `sk_test_` ou `rk_test_`, evitando cobranças acidentais. Passar para produção exige alterar conscientemente essa opção, usar chaves de produção, HTTPS, revisar os meios de pagamento e configurar outro webhook; este projeto não ativa cobranças reais por padrão.
 - O seed é voltado para avaliação local e deve ser removido/adaptado em produção.
 
 ## Testes
@@ -207,7 +247,7 @@ cd backend
 pytest -q
 ```
 
-Os testes cobrem token assinado e adulteração, limites dos eventos, adaptador Ticketmaster, mapa de 200 cadeiras, estoque geral de shows, compras atômicas, esgotamento, cancelamento, RBAC, datas e portaria para os dois tipos e exclusão de eventos próprios/de terceiros, passados e futuros com reserva.
+Os testes cobrem token assinado e adulteração, limites dos eventos, adaptador Ticketmaster, mapa de 200 cadeiras, estoque geral de shows, compras atômicas, esgotamento, cancelamento, RBAC, datas, portaria, exclusão de eventos e o Checkout Stripe: bloqueio temporário, aprovação, falha, cancelamento, propriedade e idempotência do webhook.
 
 ## Deploy
 
@@ -222,7 +262,7 @@ Os testes cobrem token assinado e adulteração, limites dos eventos, adaptador 
 
 1. Publique `backend` como serviço Python.
 2. Crie um PostgreSQL gerenciado.
-3. Configure `DATABASE_URL`, `JWT_SECRET`, `TICKET_SECRET`, `FRONTEND_URL`, `CORS_ORIGINS` e as chaves externas.
+3. Configure `DATABASE_URL`, `JWT_SECRET`, `TICKET_SECRET`, `FRONTEND_URL`, `CORS_ORIGINS`, as chaves externas e as credenciais de teste da Stripe.
 4. Comando de inicialização: `python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 
 A aplicação foi organizada para separação de responsabilidades entre frontend e API, de forma que o frontend possa estar na Vercel e o backend em outro provedor.
@@ -287,6 +327,12 @@ JWT_SECRET=<segredo longo e aleatório>
 TICKET_SECRET=<outro segredo longo e aleatório>
 FRONTEND_URL=https://SEU-PROJETO.vercel.app
 CORS_ORIGINS=https://SEU-PROJETO.vercel.app
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_CURRENCY=brl
+STRIPE_CHECKOUT_EXPIRATION_MINUTES=30
+STRIPE_TEST_MODE=true
+ENABLE_SIMULATED_PAYMENTS=false
 APP_TIMEZONE=America/Sao_Paulo
 ```
 
@@ -359,12 +405,14 @@ O Render mantém a conexão WebSocket do serviço FastAPI; o banco continua send
 - [ ] Criar PostgreSQL no Supabase.
 - [ ] Criar API no Render com `backend` como Root Directory.
 - [ ] Configurar `DATABASE_URL`, `JWT_SECRET`, `TICKET_SECRET`.
+- [ ] Configurar `STRIPE_SECRET_KEY` de teste no Render.
+- [ ] Cadastrar o webhook do Render na Stripe e configurar `STRIPE_WEBHOOK_SECRET`.
 - [ ] Criar frontend na Vercel com `frontend` como Root Directory.
 - [ ] Configurar `NEXT_PUBLIC_API_URL`.
 - [ ] Copiar a URL da Vercel para `FRONTEND_URL` e `CORS_ORIGINS` no Render.
 - [ ] Abrir `/health` do backend.
 - [ ] Fazer login com `cliente1@elite.dev` / `123456`.
-- [ ] Comprar um assento.
+- [ ] Comprar um assento usando um cartão de teste da Stripe.
 - [ ] Confirmar QR em **Meus ingressos**.
 - [ ] Abrir a URL compartilhável.
 - [ ] Entrar como `portaria@elite.dev` / `123456` e validar o QR.

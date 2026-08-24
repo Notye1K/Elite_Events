@@ -44,6 +44,13 @@ TICKET_SECRET
 FRONTEND_URL
 CORS_ORIGINS
 TMDB_API_KEY (opcional)
+TICKETMASTER_API_KEY (opcional)
+STRIPE_SECRET_KEY (chave de teste `sk_test_...` ou restrita `rk_test_...`)
+STRIPE_WEBHOOK_SECRET (`whsec_...` do endpoint cadastrado no Render)
+STRIPE_CURRENCY=brl
+STRIPE_CHECKOUT_EXPIRATION_MINUTES=30
+STRIPE_TEST_MODE=true
+ENABLE_SIMULATED_PAYMENTS=false
 ```
 
 8. Faça o deploy.
@@ -80,7 +87,7 @@ Faça redeploy da API.
 2. Login cliente: `cliente1@elite.dev` / `123456`.
 3. Evento seed aparece.
 4. Assento pode ser selecionado.
-5. Pagamento aprovado cria ingresso.
+5. Checkout Stripe aprovado e confirmado pelo webhook cria o ingresso.
 6. QR aparece em **Meus ingressos**.
 7. Login portaria: `portaria@elite.dev` / `123456`.
 8. Validação retorna `valid`.

@@ -8,8 +8,8 @@ export default function Home() {
           <div className="eyebrow">Eventos sem atrito</div>
           <h1>Do catálogo à portaria, sem pontos cegos.</h1>
           <p className="muted">
-            Uma jornada curta: descobrir, escolher lugar, pagar simulado,
-            receber QR e validar na entrada.
+            Uma jornada curta: descobrir, escolher lugar, pagar no sandbox da
+            Stripe, receber QR e validar na entrada.
           </p>
           <div
             className="row"

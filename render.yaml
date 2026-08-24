@@ -23,5 +23,17 @@ services:
         sync: false
       - key: TICKETMASTER_API_KEY
         sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_CURRENCY
+        value: brl
+      - key: STRIPE_CHECKOUT_EXPIRATION_MINUTES
+        value: "30"
+      - key: STRIPE_TEST_MODE
+        value: "true"
+      - key: ENABLE_SIMULATED_PAYMENTS
+        value: "false"
       - key: APP_TIMEZONE
         value: America/Sao_Paulo

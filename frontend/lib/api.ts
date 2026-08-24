@@ -79,7 +79,7 @@ function formatValidationErrors(details: ValidationErrorDetail[]) {
     .join("\n");
 }
 
-function translateBackendMessage(detail: string) {
+function translateApiMessage(detail: string) {
   const messages: Record<string, string> = {
     "Authentication required": "Faça login para continuar.",
     "Invalid token": "Sua sessão é inválida ou expirou. Entre novamente.",
@@ -99,7 +99,7 @@ function translateBackendMessage(detail: string) {
 function apiErrorMessage(data: unknown, status: number) {
   if (data && typeof data === "object" && "detail" in data) {
     const detail = (data as { detail?: unknown }).detail;
-    if (typeof detail === "string") return translateBackendMessage(detail);
+    if (typeof detail === "string") return translateApiMessage(detail);
     if (Array.isArray(detail)) {
       return formatValidationErrors(detail as ValidationErrorDetail[]);
     }

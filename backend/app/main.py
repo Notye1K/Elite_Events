@@ -1,16 +1,29 @@
-from datetime import datetime, timezone
-from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+import logging
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from .config import settings
 from .db import get_db, initialize_database
 from .deps import current_user, role_required
+from .checkout_service import (
+    available_count,
+    checkout_to_out,
+    fulfill_checkout,
+    release_checkout,
+    release_expired_checkouts,
+)
 from .event_time import is_event_from_previous_day
-from .models import Event, Reservation, Seat, Ticket, User
+from .models import CheckoutReservation, Event, PaymentCheckout, Reservation, Seat, Ticket, User
+from .payments import StripePaymentGateway, get_payment_gateway
 from .schemas import *
 from .security import create_access_token, decode_ticket_token, hash_password, token_hash, verify_password
 from .services import build_ticket, catalog_search, create_event_seats
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title=settings.app_name, version="1.0.0")
 app.add_middleware(
@@ -93,6 +106,8 @@ def get_seats(event_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Event not found")
     if event.event_type == "show":
         return []
+    if release_expired_checkouts(db, event_id=event.id):
+        db.commit()
     return list(db.scalars(select(Seat).where(Seat.event_id == event_id).order_by(Seat.row, Seat.number)).all())
 
 @app.get("/events/{event_id}/availability", response_model=EventAvailabilityOut)
@@ -100,12 +115,9 @@ def get_event_availability(event_id: int, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
-    available = db.scalar(
-        select(func.count(Seat.id)).where(
-            Seat.event_id == event.id,
-            Seat.status == "available",
-        )
-    ) or 0
+    if release_expired_checkouts(db, event_id=event.id):
+        db.commit()
+    available = available_count(db, event.id)
     return EventAvailabilityOut(capacity=event.capacity, available=available)
 
 @app.post("/organizer/events", response_model=EventOut)
@@ -156,6 +168,20 @@ def delete_event(event_id: int, user: User = Depends(role_required("organizer"))
                 "Eventos futuros com reservas ativas não podem ser excluídos.",
             )
 
+    checkout_ids = list(
+        db.scalars(
+            select(PaymentCheckout.id).where(PaymentCheckout.event_id == event.id)
+        ).all()
+    )
+    if checkout_ids:
+        db.execute(
+            delete(CheckoutReservation).where(
+                CheckoutReservation.checkout_id.in_(checkout_ids)
+            )
+        )
+        db.execute(
+            delete(PaymentCheckout).where(PaymentCheckout.id.in_(checkout_ids))
+        )
     db.execute(delete(Ticket).where(Ticket.event_id == event.id))
     db.execute(delete(Reservation).where(Reservation.event_id == event.id))
     db.delete(event)
@@ -169,8 +195,406 @@ def external_catalog(source: str = Query(pattern="^(tmdb|ticketmaster)$"), q: st
     except Exception as exc:
         raise HTTPException(502, f"External catalog error: {exc}") from exc
 
+async def broadcast_inventory_changes(event_id: int, seats: list[Seat], db: Session):
+    if not seats:
+        return
+    current_available = available_count(db, event_id)
+    for seat in {seat.id: seat for seat in seats}.values():
+        await manager.broadcast(
+            event_id,
+            {
+                "type": "seat_updated",
+                "seat_id": seat.id,
+                "status": seat.status,
+                "available_count": current_available,
+            },
+        )
+
+def owned_checkout(db: Session, checkout_id: str, user_id: int, *, lock: bool = False):
+    stmt = select(PaymentCheckout).where(
+        PaymentCheckout.id == checkout_id,
+        PaymentCheckout.user_id == user_id,
+    )
+    if lock:
+        stmt = stmt.with_for_update()
+    checkout = db.scalar(stmt)
+    if not checkout:
+        raise HTTPException(404, "Checkout não encontrado.")
+    return checkout
+
+def stripe_object_value(value, key: str, default=None):
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def stripe_public_error_message(exc: Exception) -> str:
+    error_type = type(exc).__name__
+    if error_type == "AuthenticationError":
+        return "Não foi possível autenticar o pagamento. Entre em contato com o suporte."
+    if error_type == "PermissionError":
+        return "Não foi possível autorizar o pagamento. Entre em contato com o suporte."
+    if error_type == "InvalidRequestError":
+        return "Não foi possível preparar este pagamento. Tente novamente e, se o problema continuar, entre em contato com o suporte."
+    if error_type == "RateLimitError":
+        return "A Stripe recebeu muitas solicitações. Aguarde alguns segundos e tente novamente."
+    if error_type in {"APIConnectionError", "APIError"}:
+        return "Não foi possível comunicar com a Stripe agora. Tente novamente em instantes."
+    return "Não foi possível iniciar o pagamento. Tente novamente e, se o problema continuar, entre em contato com o suporte."
+
+def validate_paid_stripe_session(checkout: PaymentCheckout, stripe_session):
+    amount_total = stripe_object_value(stripe_session, "amount_total")
+    currency = stripe_object_value(stripe_session, "currency")
+    metadata = stripe_object_value(stripe_session, "metadata", {}) or {}
+    metadata_checkout_id = stripe_object_value(metadata, "checkout_id")
+    if amount_total is None or int(amount_total) != checkout.amount_cents:
+        raise HTTPException(409, "O valor confirmado pela Stripe não corresponde ao checkout.")
+    if not currency or str(currency).lower() != checkout.currency:
+        raise HTTPException(409, "A moeda confirmada pela Stripe não corresponde ao checkout.")
+    if metadata_checkout_id != checkout.id:
+        raise HTTPException(409, "A referência confirmada pela Stripe não corresponde ao checkout.")
+
+@app.post("/checkout/sessions", response_model=CheckoutOut)
+async def create_checkout_session(
+    payload: CheckoutCreate,
+    user: User = Depends(role_required("client")),
+    db: Session = Depends(get_db),
+    gateway: StripePaymentGateway = Depends(get_payment_gateway),
+):
+    event = db.scalar(
+        select(Event).where(Event.id == payload.event_id).with_for_update()
+    )
+    if not event or not event.published:
+        raise HTTPException(404, "Evento não encontrado.")
+    if is_event_from_previous_day(event.starts_at):
+        raise HTTPException(
+            409,
+            "Não é possível reservar ingressos para eventos de dias anteriores.",
+        )
+    if event.price_cents > 0 and not gateway.configured:
+        raise HTTPException(
+            503,
+            "O pagamento com Stripe ainda não foi configurado pelo administrador.",
+        )
+
+    released_expired = release_expired_checkouts(db, event_id=event.id)
+    if event.event_type == "show":
+        if payload.seat_ids or payload.quantity is None:
+            raise HTTPException(400, "Shows devem informar somente a quantidade de ingressos.")
+        seats = list(
+            db.scalars(
+                select(Seat)
+                .where(Seat.event_id == event.id, Seat.status == "available")
+                .order_by(Seat.id)
+                .limit(payload.quantity)
+                .with_for_update(skip_locked=True)
+            ).all()
+        )
+        if len(seats) != payload.quantity:
+            raise HTTPException(409, "Não há ingressos suficientes disponíveis.")
+    else:
+        if payload.quantity is not None or not payload.seat_ids:
+            raise HTTPException(400, "Filmes exigem a seleção de pelo menos um assento.")
+        ordered_ids = sorted(payload.seat_ids)
+        seats = list(
+            db.scalars(
+                select(Seat)
+                .where(Seat.id.in_(ordered_ids), Seat.event_id == event.id)
+                .order_by(Seat.id)
+                .with_for_update()
+            ).all()
+        )
+        if len(seats) != len(ordered_ids) or any(
+            seat.status != "available" for seat in seats
+        ):
+            raise HTTPException(409, "Um ou mais assentos não estão mais disponíveis.")
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(
+        minutes=settings.stripe_checkout_expiration_minutes,
+        seconds=15,
+    )
+    checkout = PaymentCheckout(
+        id=str(uuid4()),
+        user_id=user.id,
+        event_id=event.id,
+        provider="free" if event.price_cents == 0 else "stripe",
+        status="pending",
+        amount_cents=event.price_cents * len(seats),
+        currency=settings.stripe_currency,
+        expires_at=expires_at,
+    )
+    db.add(checkout)
+    db.flush()
+
+    for seat in seats:
+        reservation = Reservation(
+            event_id=event.id,
+            seat_id=seat.id,
+            user_id=user.id,
+            status="pending",
+            payment_status="pending",
+        )
+        db.add(reservation)
+        seat.status = "reserved"
+        db.flush()
+        db.add(
+            CheckoutReservation(
+                checkout_id=checkout.id,
+                reservation_id=reservation.id,
+            )
+        )
+    db.flush()
+
+    if event.price_cents == 0:
+        fulfill_checkout(db, checkout, provider_payment_id=None)
+    else:
+        base_frontend_url = settings.frontend_url.rstrip("/")
+        try:
+            stripe_session = gateway.create_checkout_session(
+                checkout_id=checkout.id,
+                event_title=event.title,
+                event_description=event.description or f"Ingresso para {event.title}",
+                unit_amount=event.price_cents,
+                quantity=len(seats),
+                customer_email=user.email,
+                success_url=(
+                    f"{base_frontend_url}/checkout/{checkout.id}"
+                    "?success=1&session_id={CHECKOUT_SESSION_ID}"
+                ),
+                cancel_url=f"{base_frontend_url}/checkout/{checkout.id}?cancelled=1",
+                expires_at=int(expires_at.timestamp()),
+                currency=checkout.currency,
+            )
+            if not stripe_session.url:
+                raise RuntimeError("A Stripe não retornou uma URL de pagamento.")
+            checkout.provider_session_id = stripe_session.id
+            checkout.checkout_url = stripe_session.url
+        except Exception as exc:
+            logger.exception(
+                "Falha ao criar Checkout Stripe (checkout_id=%s, event_id=%s, error_type=%s)",
+                checkout.id,
+                event.id,
+                type(exc).__name__,
+            )
+            release_checkout(
+                db,
+                checkout,
+                status="failed",
+                payment_status="failed",
+            )
+            db.commit()
+            raise HTTPException(
+                502,
+                stripe_public_error_message(exc),
+            ) from exc
+
+    db.commit()
+    db.refresh(checkout)
+    await broadcast_inventory_changes(event.id, released_expired + seats, db)
+    return checkout_to_out(db, checkout)
+
+@app.get("/checkout/sessions/{checkout_id}", response_model=CheckoutOut)
+async def get_checkout_session(
+    checkout_id: str,
+    user: User = Depends(role_required("client")),
+    db: Session = Depends(get_db),
+):
+    checkout = owned_checkout(db, checkout_id, user.id, lock=True)
+    changed_seats = release_expired_checkouts(db, event_id=checkout.event_id)
+    if changed_seats:
+        db.commit()
+        db.refresh(checkout)
+        await broadcast_inventory_changes(checkout.event_id, changed_seats, db)
+    return checkout_to_out(db, checkout)
+
+@app.post("/checkout/sessions/{checkout_id}/sync", response_model=CheckoutOut)
+async def sync_checkout_session(
+    checkout_id: str,
+    payload: CheckoutSyncIn,
+    user: User = Depends(role_required("client")),
+    db: Session = Depends(get_db),
+    gateway: StripePaymentGateway = Depends(get_payment_gateway),
+):
+    checkout = owned_checkout(db, checkout_id, user.id, lock=True)
+    if checkout.provider != "stripe" or checkout.provider_session_id != payload.session_id:
+        raise HTTPException(400, "Sessão da Stripe inválida para este checkout.")
+    if not gateway.configured:
+        raise HTTPException(503, "A Stripe ainda não foi configurada.")
+
+    try:
+        stripe_session = gateway.retrieve_checkout_session(payload.session_id)
+    except Exception as exc:
+        logger.exception(
+            "Falha ao consultar Checkout Stripe (checkout_id=%s, error_type=%s)",
+            checkout.id,
+            type(exc).__name__,
+        )
+        raise HTTPException(502, "Não foi possível confirmar o pagamento na Stripe.") from exc
+
+    changed_seats: list[Seat] = []
+    if stripe_session.payment_status == "paid":
+        validate_paid_stripe_session(checkout, stripe_session)
+        fulfill_checkout(
+            db,
+            checkout,
+            provider_payment_id=stripe_session.payment_intent,
+        )
+    elif stripe_session.status == "expired":
+        changed_seats = release_checkout(
+            db,
+            checkout,
+            status="expired",
+            payment_status="expired",
+        )
+    elif stripe_session.status == "complete":
+        checkout.status = "processing"
+
+    db.commit()
+    db.refresh(checkout)
+    await broadcast_inventory_changes(checkout.event_id, changed_seats, db)
+    return checkout_to_out(db, checkout)
+
+@app.post("/checkout/sessions/{checkout_id}/cancel", response_model=CheckoutOut)
+async def cancel_checkout_session(
+    checkout_id: str,
+    user: User = Depends(role_required("client")),
+    db: Session = Depends(get_db),
+    gateway: StripePaymentGateway = Depends(get_payment_gateway),
+):
+    checkout = owned_checkout(db, checkout_id, user.id, lock=True)
+    if checkout.status == "processing":
+        raise HTTPException(409, "O pagamento está sendo processado e não pode ser cancelado agora.")
+    if checkout.status != "pending":
+        return checkout_to_out(db, checkout)
+
+    if checkout.provider == "stripe" and checkout.provider_session_id:
+        try:
+            stripe_session = gateway.retrieve_checkout_session(
+                checkout.provider_session_id
+            )
+            if stripe_session.payment_status == "paid":
+                validate_paid_stripe_session(checkout, stripe_session)
+                fulfill_checkout(
+                    db,
+                    checkout,
+                    provider_payment_id=stripe_session.payment_intent,
+                )
+                db.commit()
+                db.refresh(checkout)
+                return checkout_to_out(db, checkout)
+            if stripe_session.status == "complete":
+                checkout.status = "processing"
+                db.commit()
+                db.refresh(checkout)
+                return checkout_to_out(db, checkout)
+            if stripe_session.status == "open":
+                gateway.expire_checkout_session(checkout.provider_session_id)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception(
+                "Falha ao cancelar Checkout Stripe (checkout_id=%s, error_type=%s)",
+                checkout.id,
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                502,
+                "Não foi possível cancelar a sessão na Stripe. Tente novamente.",
+            ) from exc
+
+    changed_seats = release_checkout(
+        db,
+        checkout,
+        status="cancelled",
+        payment_status="cancelled",
+    )
+    db.commit()
+    db.refresh(checkout)
+    await broadcast_inventory_changes(checkout.event_id, changed_seats, db)
+    return checkout_to_out(db, checkout)
+
+@app.post("/payments/stripe/webhook")
+async def stripe_webhook(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
+    db: Session = Depends(get_db),
+    gateway: StripePaymentGateway = Depends(get_payment_gateway),
+):
+    if not stripe_signature:
+        raise HTTPException(400, "Assinatura da Stripe ausente.")
+    if not gateway.webhook_secret:
+        raise HTTPException(503, "Webhook da Stripe ainda não foi configurado.")
+    try:
+        event_payload = gateway.construct_webhook_event(
+            await request.body(),
+            stripe_signature,
+        )
+    except Exception as exc:
+        raise HTTPException(400, "Assinatura da Stripe inválida.") from exc
+
+    event_type = stripe_object_value(event_payload, "type")
+    event_data = stripe_object_value(event_payload, "data", {}) or {}
+    stripe_session = stripe_object_value(event_data, "object", {}) or {}
+    session_id = stripe_object_value(stripe_session, "id")
+    if not session_id or not str(event_type).startswith("checkout.session."):
+        return {"received": True}
+
+    checkout = db.scalar(
+        select(PaymentCheckout)
+        .where(PaymentCheckout.provider_session_id == session_id)
+        .with_for_update()
+    )
+    if not checkout:
+        return {"received": True}
+
+    changed_seats: list[Seat] = []
+    payment_status = stripe_object_value(stripe_session, "payment_status")
+    payment_intent = stripe_object_value(stripe_session, "payment_intent")
+    if payment_intent is not None and not isinstance(payment_intent, str):
+        payment_intent = stripe_object_value(payment_intent, "id")
+
+    if event_type in {
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+    }:
+        if payment_status == "paid":
+            validate_paid_stripe_session(checkout, stripe_session)
+            fulfill_checkout(
+                db,
+                checkout,
+                provider_payment_id=payment_intent,
+            )
+        elif checkout.status == "pending":
+            checkout.status = "processing"
+    elif event_type == "checkout.session.async_payment_failed":
+        changed_seats = release_checkout(
+            db,
+            checkout,
+            status="failed",
+            payment_status="declined",
+        )
+    elif event_type == "checkout.session.expired":
+        changed_seats = release_checkout(
+            db,
+            checkout,
+            status="expired",
+            payment_status="expired",
+        )
+
+    db.commit()
+    await broadcast_inventory_changes(checkout.event_id, changed_seats, db)
+    return {"received": True}
+
 def reservation_to_out(reservation: Reservation, ticket_id: int | None = None):
     return ReservationOut(id=reservation.id, status=reservation.status, payment_status=reservation.payment_status, ticket_id=ticket_id)
+
+def simulated_payments_required():
+    if not settings.enable_simulated_payments:
+        raise HTTPException(
+            410,
+            "A simulação interna foi desativada. Use o Checkout da Stripe.",
+        )
 
 async def reserve_seats(
     seat_ids: list[int],
@@ -265,17 +689,17 @@ async def reserve_seats(
 
     return results
 
-@app.post("/reservations", response_model=ReservationOut)
-async def reserve(payload: ReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+@app.post("/reservations", response_model=ReservationOut, deprecated=True)
+async def reserve(payload: ReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db), _=Depends(simulated_payments_required)):
     results = await reserve_seats([payload.seat_id], payload.payment, user, db)
     return results[0]
 
-@app.post("/reservations/batch", response_model=list[ReservationOut])
-async def reserve_batch(payload: ReservationBatchCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+@app.post("/reservations/batch", response_model=list[ReservationOut], deprecated=True)
+async def reserve_batch(payload: ReservationBatchCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db), _=Depends(simulated_payments_required)):
     return await reserve_seats(payload.seat_ids, payload.payment, user, db)
 
-@app.post("/reservations/general", response_model=list[ReservationOut])
-async def reserve_general(payload: GeneralReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db)):
+@app.post("/reservations/general", response_model=list[ReservationOut], deprecated=True)
+async def reserve_general(payload: GeneralReservationCreate, user: User = Depends(role_required("client")), db: Session = Depends(get_db), _=Depends(simulated_payments_required)):
     event = db.get(Event, payload.event_id)
     if not event or not event.published:
         raise HTTPException(404, "Evento não encontrado.")
@@ -318,9 +742,56 @@ async def cancel_reservation(reservation_id: int, user: User = Depends(role_requ
     ticket = db.scalar(select(Ticket).where(Ticket.reservation_id == reservation.id))
     if reservation.status != "confirmed" or not ticket or ticket.status != "valid":
         raise HTTPException(409, "Somente ingressos válidos podem ser cancelados.")
+    checkout = db.scalar(
+        select(PaymentCheckout)
+        .join(
+            CheckoutReservation,
+            CheckoutReservation.checkout_id == PaymentCheckout.id,
+        )
+        .where(CheckoutReservation.reservation_id == reservation.id)
+    )
+    if checkout and checkout.provider == "stripe" and checkout.provider_payment_id:
+        gateway = get_payment_gateway()
+        if not gateway.configured:
+            raise HTTPException(
+                503,
+                "A Stripe não está configurada para processar o reembolso.",
+            )
+        event = db.get(Event, reservation.event_id)
+        try:
+            gateway.create_refund(
+                checkout.provider_payment_id,
+                event.price_cents,
+                ticket.id,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Falha ao reembolsar ingresso na Stripe (ticket_id=%s, checkout_id=%s, error_type=%s)",
+                ticket.id,
+                checkout.id,
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                502,
+                "A Stripe não conseguiu processar o reembolso. O ingresso continua válido.",
+            ) from exc
     reservation.status = "cancelled"; reservation.payment_status = "refunded"
     seat = db.get(Seat, reservation.seat_id); seat.status = "available"
     ticket.status = "cancelled"
+    if checkout:
+        remaining_confirmed = db.scalar(
+            select(func.count(Reservation.id))
+            .join(
+                CheckoutReservation,
+                CheckoutReservation.reservation_id == Reservation.id,
+            )
+            .where(
+                CheckoutReservation.checkout_id == checkout.id,
+                Reservation.id != reservation.id,
+                Reservation.status == "confirmed",
+            )
+        ) or 0
+        checkout.status = "partially_refunded" if remaining_confirmed else "refunded"
     db.commit()
     available_count = db.scalar(
         select(func.count(Seat.id)).where(

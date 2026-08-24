@@ -7,13 +7,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
+from app.config import settings
 from app.deps import current_user
 from app.main import app
 from app.models import Event, Seat, User
 
 
 @pytest.fixture
-def access_context():
+def access_context(monkeypatch):
+    monkeypatch.setattr(settings, "enable_simulated_payments", True)
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
