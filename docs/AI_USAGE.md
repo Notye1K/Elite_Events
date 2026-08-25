@@ -10,5 +10,6 @@ Este projeto foi produzido com apoio de IA, em vez de esconder esse fato. O obje
 - revisão de casos de erro do fluxo de portaria;
 - criação de testes unitários básicos;
 - revisão da estrutura do Compose.
+- implementação de features em geral.
 
 O [`AGENTS.md`](../AGENTS.md) foi mantido no repositório como um dos artefatos de contexto usados no desenvolvimento.
